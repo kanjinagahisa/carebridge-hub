@@ -114,10 +114,10 @@ export default async function GroupTimelinePage({
     const isAdmin = userRole === ROLES.ADMIN
     console.log('[GroupTimelinePage] User role:', userRole, 'isAdmin:', isAdmin)
 
-    const firstFacility = userFacilities?.[0]?.facilities
+    const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
     const facilityName = Array.isArray(firstFacility)
       ? firstFacility[0]?.name
-      : firstFacility?.name
+      : (firstFacility as { name?: string } | null | undefined)?.name
 
     // グループ情報を取得 (admin client を使用して RLS をバイパス)
     console.log('[GroupTimelinePage] Fetching group with admin client for group ID:', params.id)
