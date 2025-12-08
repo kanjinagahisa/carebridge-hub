@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft, Copy, Check } from 'lucide-react'
 import { ROLES, ROLE_LABELS } from '@/lib/constants'
 import { createClient } from '@/lib/supabase/client'
 
-export default function InviteCreatePage() {
+function InviteCreateContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const facilityId = searchParams.get('facility_id')
@@ -283,4 +283,14 @@ export default function InviteCreatePage() {
   )
 }
 
-
+export default function InviteCreatePage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-100 pb-20 flex items-center justify-center">
+        <p className="text-gray-600">読み込み中...</p>
+      </div>
+    }>
+      <InviteCreateContent />
+    </Suspense>
+  )
+}

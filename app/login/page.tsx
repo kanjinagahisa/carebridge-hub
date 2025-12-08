@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Logo from '@/components/Logo'
 
-export default function LoginPage() {
+function LoginContent() {
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get('redirect') || '/home'
 
@@ -179,6 +179,25 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-md p-8">
+            <div className="mb-8 text-center">
+              <Logo />
+              <p className="mt-4 text-gray-600">読み込み中...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    }>
+      <LoginContent />
+    </Suspense>
   )
 }
 
