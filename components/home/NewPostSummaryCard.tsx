@@ -1,0 +1,97 @@
+'use client'
+
+import Link from 'next/link'
+import { format } from 'date-fns'
+import { ja } from 'date-fns/locale/ja'
+import { ThumbsUp, Eye } from 'lucide-react'
+import type { Post } from '@/types/carebridge'
+
+interface NewPostSummaryCardProps {
+  post: Post & {
+    groups?: { name: string } | null
+    clients?: { name: string } | null
+    author?: { display_name: string } | null
+    postType?: 'group' | 'client'
+  }
+  currentUserId?: string
+  isUnread?: boolean
+}
+
+/**
+ * 新着投稿まとめカードコンポーネント
+ * 既存のデザインパターン（bg-white rounded-xl shadow-sm）を使用
+ * グループ投稿と利用者投稿の両方に対応
+ */
+export default function NewPostSummaryCard({ post, currentUserId, isUnread = false }: NewPostSummaryCardProps) {
+  const isClientPost = post.postType === 'client' || !!post.client_id
+  const postName = isClientPost 
+    ? (post.clients?.name || '利用者名不明')
+    : (post.groups?.name || 'グループ名不明')
+  const authorName = post.author?.display_name || '不明なユーザー'
+  const likeCount = post.reactions?.filter((r) => r.type === 'like').length || 0
+  const readCount = post.reads?.length || 0
+  
+  // 現在のユーザーが既読かどうかを判定
+  const isReadByCurrentUser = currentUserId 
+    ? post.reads?.some((r: any) => r.user_id === currentUserId) || false
+    : false
+  const showUnreadBadge = isUnread || (!isReadByCurrentUser && currentUserId)
+
+  // 投稿本文を2〜3行で省略（最大100文字）
+  const bodyPreview = post.body.length > 100
+    ? post.body.substring(0, 100) + '...'
+    : post.body
+
+  // リンク先を決定
+  const linkHref = isClientPost 
+    ? `/clients/${post.client_id}/timeline`
+    : `/groups/${post.group_id}`
+
+  return (
+    <Link
+      href={linkHref}
+      className="block bg-white rounded-xl shadow-sm p-4 hover:bg-gray-50 transition-colors"
+    >
+      {/* 種別ラベルと名前 */}
+      <div className="flex items-center gap-2 mb-2">
+        <span className="text-xs text-gray-500">
+          {isClientPost ? '🧑‍🦽 利用者' : '👥 グループ'}
+        </span>
+        <h3 className="font-semibold text-gray-900">{postName}</h3>
+        {showUnreadBadge && (
+          <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full font-medium">
+            新着
+          </span>
+        )}
+      </div>
+
+      {/* 投稿日時 */}
+      <p className="text-xs text-gray-500 mb-2">
+        {format(new Date(post.created_at), 'yyyy年MM月dd日 HH:mm', { locale: ja })}
+      </p>
+
+      {/* 投稿本文（2〜3行で省略） */}
+      <p className="text-sm text-gray-800 mb-3 line-clamp-3 whitespace-pre-wrap">
+        {bodyPreview}
+      </p>
+
+      {/* 投稿者名・いいね数・既読数 */}
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <span className="text-gray-600">{authorName}</span>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
+            <ThumbsUp size={14} className="text-gray-400" />
+            <span>{likeCount}</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <Eye size={14} className="text-gray-400" />
+            <span>既読 {readCount}</span>
+          </div>
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+
+
