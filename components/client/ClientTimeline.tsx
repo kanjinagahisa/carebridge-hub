@@ -187,7 +187,7 @@ export default function ClientTimeline({
 
         if (urlError) {
           // 404エラーの場合はリトライしない（ファイルが存在しない）
-          if (urlError.statusCode === '404' || urlError.message?.includes('not found')) {
+          if ((urlError as any).statusCode === '404' || urlError.message?.includes('not found')) {
             console.error(
               `[ClientTimeline] File not found for attachment ${attachmentId}, storage path: ${storagePath}`
             )
