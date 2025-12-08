@@ -188,8 +188,8 @@ export default async function HomePage() {
             const isReadByCurrentUser = postReads.some((r) => r.user_id === user.id)
             return {
               ...post,
-              reactions: reactions?.filter((r) => r.post_id === post.id) || [],
-              reads: postReads,
+              reactions: (reactions?.filter((r) => r.post_id === post.id) || []) as any,
+              reads: postReads as any,
               isUnread: !isReadByCurrentUser,
             }
           })
