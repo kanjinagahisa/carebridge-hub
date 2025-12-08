@@ -66,10 +66,10 @@ export default async function ConnectionsPage() {
     .eq('user_id', user.id)
     .eq('deleted', false)
 
-  const firstFacility = userFacilities?.[0]?.facilities
+  const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
   const facilityName = Array.isArray(firstFacility)
     ? firstFacility[0]?.name
-    : firstFacility?.name
+    : (firstFacility as { name?: string } | null | undefined)?.name
 
   return (
     <div className="min-h-screen bg-gray-100 pb-20">
