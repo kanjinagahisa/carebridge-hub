@@ -144,6 +144,7 @@ export default async function HomePage() {
       author?: { display_name: string } | null
       type_label?: string
       link_path?: string
+      isUnread?: boolean
     })[] = []
 
     if (groupIds.length > 0 || clientIds.length > 0) {
