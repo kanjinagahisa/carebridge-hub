@@ -18,7 +18,7 @@ export function createApiClient(request: NextRequest) {
       getAll() {
         return request.cookies.getAll()
       },
-      setAll(cookiesToSet) {
+      setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
         // API RouteではCookieを設定できないため、何もしない
         // 必要に応じて、レスポンスヘッダーにCookieを設定する
       },
