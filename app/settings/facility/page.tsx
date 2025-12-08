@@ -8,6 +8,9 @@ import { getUserRole } from '@/lib/utils/auth-server'
 import FacilityBasicInfoCard from '@/components/settings/FacilityBasicInfoCard'
 import StaffManagementCard from '@/components/settings/StaffManagementCard'
 
+// 認証が必要なページのため、動的レンダリングを強制
+export const dynamic = 'force-dynamic'
+
 export default async function FacilitySettingsPage() {
   console.log('[FacilitySettingsPage] Starting...')
 

@@ -4,6 +4,9 @@ import GroupList from '@/components/groups/GroupList'
 import type { Group } from '@/types/carebridge'
 import { ROLES } from '@/lib/constants'
 
+// 認証が必要なページのため、動的レンダリングを強制
+export const dynamic = 'force-dynamic'
+
 /**
  * グループ一覧ページ（Server Component）
  * データ取得を行い、Client Component に渡す

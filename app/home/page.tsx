@@ -7,6 +7,9 @@ import type { Post } from '@/types/carebridge'
 import NewPostSummaryCard from '@/components/home/NewPostSummaryCard'
 import Header from '@/components/Header'
 
+// 認証が必要なページのため、動的レンダリングを強制
+export const dynamic = 'force-dynamic'
+
 /**
  * ホームページ（/home）
  * Server Component として実装

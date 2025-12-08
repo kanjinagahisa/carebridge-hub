@@ -7,6 +7,9 @@ import { LogOut, User, FileText, Shield, UserPlus, Settings } from 'lucide-react
 import { PROFESSION_LABELS, ROLES } from '@/lib/constants'
 import LogoutButton from '@/components/LogoutButton'
 
+// 認証が必要なページのため、動的レンダリングを強制
+export const dynamic = 'force-dynamic'
+
 export default async function MenuPage() {
   console.log('[MenuPage] Starting...')
   

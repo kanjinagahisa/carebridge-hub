@@ -3,6 +3,9 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import ClientsListClient from './ClientsListClient'
 import type { Client } from '@/types/carebridge'
 
+// 認証が必要なページのため、動的レンダリングを強制
+export const dynamic = 'force-dynamic'
+
 /**
  * 利用者一覧ページ（Server Component）
  * データ取得を行い、Client Component に渡す
