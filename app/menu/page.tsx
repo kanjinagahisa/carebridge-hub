@@ -130,10 +130,10 @@ export default async function MenuPage() {
       ? userFacilities[0].facility_id 
       : null
     // 施設名を取得
-    const firstFacility = userFacilities?.[0]?.facilities
+    const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
     const facilityName = Array.isArray(firstFacility)
       ? firstFacility[0]?.name
-      : firstFacility?.name
+      : (firstFacility as { name?: string } | null | undefined)?.name
     console.log('[MenuPage] User facilities count:', userFacilities?.length || 0)
     console.log('[MenuPage] User roles:', userFacilities?.map((uf) => uf.role) || [])
     console.log('[MenuPage] User is admin:', isAdmin)

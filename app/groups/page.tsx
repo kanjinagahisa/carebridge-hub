@@ -115,10 +115,10 @@ export default async function GroupsPage() {
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    const firstFacility = userFacilities?.[0]?.facilities
+    const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
     const facilityName = Array.isArray(firstFacility)
       ? firstFacility[0]?.name
-      : firstFacility?.name
+      : (firstFacility as { name?: string } | null | undefined)?.name
 
     // ユーザーのロールを取得（admin かどうか）
     const userRole = userFacilities?.[0]?.role
