@@ -22,7 +22,7 @@ export function createApiClient(request: NextRequest) {
         // API RouteではCookieを設定できないため、何もしない
         // 必要に応じて、レスポンスヘッダーにCookieを設定する
       },
-    },
+    } as any,
   })
 }
 
