@@ -142,7 +142,7 @@ export default function ClientPostComposer({
             console.error('[ClientPostComposer] Upload error details:', {
               message: uploadError.message,
               statusCode: (uploadError as any).statusCode,
-              error: uploadError.error,
+              error: (uploadError as any).error,
               name: uploadError.name,
             })
             alert(`ファイルのアップロードに失敗しました: ${uploadError.message}`)
