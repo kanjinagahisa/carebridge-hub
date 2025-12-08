@@ -123,10 +123,10 @@ export default async function ClientsPage() {
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    const firstFacility = userFacilities?.[0]?.facilities
+    const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
     const facilityName = Array.isArray(firstFacility)
       ? firstFacility[0]?.name
-      : firstFacility?.name
+      : (firstFacility as { name?: string } | null | undefined)?.name
 
     console.log('[ClientsPage] Facility info:', {
       facilityIdsCount: facilityIds.length,
