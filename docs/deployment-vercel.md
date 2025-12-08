@@ -6,8 +6,9 @@
 2. [Vercel プロジェクト作成手順](#vercel-プロジェクト作成手順)
 3. [Build & Output 設定](#build--output-設定)
 4. [Environment Variables 設定手順](#environment-variables-設定手順)
-5. [初回デプロイ後の確認項目](#初回デプロイ後の確認項目)
-6. [トラブルシューティング](#トラブルシューティング)
+5. [Supabase メールテンプレートの日本語化（オプション）](#supabase-メールテンプレートの日本語化オプション)
+6. [初回デプロイ後の確認項目](#初回デプロイ後の確認項目)
+7. [トラブルシューティング](#トラブルシューティング)
 
 ---
 
@@ -135,6 +136,73 @@ Install Command: npm install（または yarn/pnpm）
 ✅ RESEND_FROM_EMAIL (オプション)
    Production, Preview
 ```
+
+---
+
+## Supabase メールテンプレートの日本語化（オプション）
+
+Supabase Auth が送信する確認メールを日本語化するには、Supabase Dashboard でメールテンプレートを編集してください。
+
+### 手順
+
+1. [Supabase Dashboard](https://supabase.com/dashboard) にアクセス
+2. 本番プロジェクト（`carebridge-hub-prod`）を選択
+3. 左メニューから **"Authentication"** → **"Email Templates"** を開く
+4. 以下のテンプレートを編集します：
+
+#### 1. Confirm signup（新規登録確認メール）
+
+**Subject（件名）:**
+```
+CareBridge Hub アカウント登録のご確認
+```
+
+**Body（本文）:**
+```
+以下のリンクをクリックして、アカウント登録を完了してください：
+
+{{ .ConfirmationURL }}
+
+このメールに心当たりがない場合は、このメールを無視していただいて構いません。
+
+---
+CareBridge Hub
+介護・福祉向け情報共有アプリ
+```
+
+#### 2. Magic Link（マジックリンク）※使用しない場合は変更不要
+
+#### 3. Change Email Address（メールアドレス変更確認）※使用しない場合は変更不要
+
+#### 4. Reset Password（パスワードリセット）
+
+**Subject（件名）:**
+```
+CareBridge Hub パスワードリセットのご案内
+```
+
+**Body（本文）:**
+```
+パスワードをリセットするには、以下のリンクをクリックしてください：
+
+{{ .ConfirmationURL }}
+
+このリンクは24時間有効です。
+
+このメールに心当たりがない場合は、このメールを無視していただいて構いません。
+
+---
+CareBridge Hub
+介護・福祉向け情報共有アプリ
+```
+
+### テンプレートの編集方法
+
+1. 各テンプレート（Confirm signup、Reset Password など）を選択
+2. **"Subject"** 欄に日本語の件名を入力
+3. **"Body"** 欄に日本語の本文を入力
+4. `{{ .ConfirmationURL }}` などの変数はそのまま残してください（これが実際のリンクに置き換わります）
+5. **"Save"** をクリック
 
 ---
 
