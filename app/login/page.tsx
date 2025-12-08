@@ -15,6 +15,206 @@ function LoginContent() {
   const [errorMessage, setErrorMessage] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+
+  // 認証確認後のコールバック処理（メール確認URLクリック後）
+  useEffect(() => {
+    const handleAuthCallback = async () => {
+      const supabase = createClient()
+      
+      // まず、既にセッションが確立されているか確認（ページリロード後など）
+      const { data: { session: existingSession } } = await supabase.auth.getSession()
+      if (existingSession) {
+        console.log('[Login] Existing session found, redirecting to home')
+        window.location.replace('/home')
+        return
+      }
+      
+      // エラーパラメータをチェック（クエリパラメータとフラグメントの両方を確認）
+      const errorParam = searchParams.get('error')
+      const errorCode = searchParams.get('error_code')
+      const errorDescription = searchParams.get('error_description')
+      
+      if (errorParam) {
+        console.error('[Login] Error parameter found:', { error: errorParam, errorCode, errorDescription })
+        if (errorCode === 'otp_expired' || errorDescription?.includes('expired') || errorDescription?.includes('invalid')) {
+          setErrorMessage('メール確認リンクの有効期限が切れています。もう一度新規登録を行ってください。')
+        } else {
+          setErrorMessage('アカウント確認に失敗しました。リンクが無効または期限切れの可能性があります。')
+        }
+        // URLからエラーパラメータを削除
+        window.history.replaceState(null, '', '/login')
+        setIsCheckingAuth(false)
+        return
+      }
+      
+      // URLフラグメント（#以降）を確認（メール確認では通常フラグメントに含まれる）
+      const hash = window.location.hash
+      
+      // フラグメント内のエラーパラメータもチェック
+      if (hash) {
+        const hashParams = new URLSearchParams(hash.substring(1))
+        const hashError = hashParams.get('error')
+        const hashErrorCode = hashParams.get('error_code')
+        const hashErrorDescription = hashParams.get('error_description')
+        
+        if (hashError) {
+          console.error('[Login] Error parameter found in hash:', { error: hashError, errorCode: hashErrorCode, errorDescription: hashErrorDescription })
+          if (hashErrorCode === 'otp_expired' || hashErrorDescription?.includes('expired') || hashErrorDescription?.includes('invalid')) {
+            setErrorMessage('メール確認リンクの有効期限が切れています。もう一度新規登録を行ってください。')
+          } else {
+            setErrorMessage('アカウント確認に失敗しました。リンクが無効または期限切れの可能性があります。')
+          }
+          // URLからエラーパラメータを削除
+          window.history.replaceState(null, '', '/login')
+          setIsCheckingAuth(false)
+          return
+        }
+      }
+      
+      if (!hash) {
+        // ハッシュがない場合、通常のログイン画面を表示
+        setIsCheckingAuth(false)
+        return
+      }
+      
+      const hashParams = new URLSearchParams(hash.substring(1))
+      const accessToken = hashParams.get('access_token')
+      const type = hashParams.get('type')
+      
+      // 新規登録確認（type=signup）の場合
+      if (type === 'signup' && accessToken) {
+        try {
+          console.log('[Login] Found signup confirmation token, setting session...')
+          // セッションを確立
+          const { data, error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: hashParams.get('refresh_token') || '',
+          })
+          
+          if (error) {
+            console.error('[Login] Token validation error:', error)
+            setErrorMessage('アカウント確認に失敗しました。リンクが無効または期限切れの可能性があります。')
+            setIsCheckingAuth(false)
+            return
+          }
+          
+          if (data.session) {
+            console.log('[Login] Session established for signup confirmation')
+            // セッション確立後、ホーム画面にリダイレクト
+            // URLフラグメントを削除してクリーンなURLに
+            window.history.replaceState(null, '', '/login')
+            setSuccessMessage('アカウント登録が完了しました。')
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+            window.location.replace('/home')
+            return
+          } else {
+            setErrorMessage('セッションの確立に失敗しました。')
+            setIsCheckingAuth(false)
+          }
+        } catch (err) {
+          console.error('[Login] Token validation exception:', err)
+          setErrorMessage('アカウント確認中にエラーが発生しました。')
+          setIsCheckingAuth(false)
+        }
+        return
+      }
+      
+      // codeパラメータをチェック（メールリンクで使用される場合がある）
+      const code = searchParams.get('code')
+      if (code) {
+        try {
+          console.log('[Login] Found code parameter, checking for existing session...')
+          
+          // 既にセッションが確立されているか確認
+          const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+          
+          if (session) {
+            console.log('[Login] Session already established from code')
+            // URLパラメータを削除してクリーンなURLに
+            window.history.replaceState(null, '', '/login')
+            setSuccessMessage('アカウント登録が完了しました。')
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+            window.location.replace('/home')
+            return
+          } else {
+            // セッションが確立されていない場合、少し待ってから再確認
+            await new Promise((resolve) => setTimeout(resolve, 500))
+            const { data: { session: retrySession } } = await supabase.auth.getSession()
+            
+            if (retrySession) {
+              // URLパラメータを削除してクリーンなURLに
+              window.history.replaceState(null, '', '/login')
+              setSuccessMessage('アカウント登録が完了しました。')
+              await new Promise((resolve) => setTimeout(resolve, 1000))
+              window.location.replace('/home')
+              return
+            } else {
+              console.warn('[Login] No session found for code parameter')
+              setIsCheckingAuth(false)
+            }
+          }
+        } catch (err) {
+          console.error('[Login] Session check exception:', err)
+          setIsCheckingAuth(false)
+        }
+        return
+      }
+      
+      // 通常のクエリパラメータ（?access_token=...）の場合も確認
+      const queryAccessToken = searchParams.get('access_token')
+      if (queryAccessToken) {
+        try {
+          console.log('[Login] Found query parameter access_token, setting session...')
+          const { data, error } = await supabase.auth.setSession({
+            access_token: queryAccessToken,
+            refresh_token: searchParams.get('refresh_token') || '',
+          })
+          
+          if (error) {
+            console.error('[Login] Token validation error:', error)
+            setErrorMessage('アカウント確認に失敗しました。')
+            setIsCheckingAuth(false)
+            return
+          }
+          
+          if (data.session) {
+            console.log('[Login] Session established for signup confirmation')
+            // URLパラメータを削除してクリーンなURLに
+            window.history.replaceState(null, '', '/login')
+            setSuccessMessage('アカウント登録が完了しました。')
+            await new Promise((resolve) => setTimeout(resolve, 1000))
+            window.location.replace('/home')
+            return
+          } else {
+            setErrorMessage('セッションの確立に失敗しました。')
+            setIsCheckingAuth(false)
+          }
+        } catch (err) {
+          console.error('[Login] Token validation exception:', err)
+          setErrorMessage('アカウント確認中にエラーが発生しました。')
+          setIsCheckingAuth(false)
+        }
+        return
+      }
+      
+      // 認証確認のコールバックがない場合、通常のログイン画面を表示
+      setIsCheckingAuth(false)
+    }
+    
+    handleAuthCallback()
+    
+    // ハッシュ変更を監視（メール確認URLクリック後にハッシュが追加される場合がある）
+    const handleHashChange = () => {
+      handleAuthCallback()
+    }
+    
+    window.addEventListener('hashchange', handleHashChange)
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+    }
+  }, [searchParams])
 
   // URLパラメータから成功メッセージを取得
   useEffect(() => {
@@ -71,14 +271,39 @@ function LoginContent() {
           // セッションが確立されるまで少し待機してからリダイレクト
           await new Promise((resolve) => setTimeout(resolve, 200))
           // 完全なページリロードを行い、サーバー側のミドルウェアがセッションを認識できるようにする
-          window.location.href = redirectTo
+          // window.location.replace を使用して、ブラウザの履歴に残さない
+          // リダイレクトを確実に実行するため、try-catchで囲む
+          try {
+            window.location.replace(redirectTo)
+            // リダイレクトが実行されない場合に備えて、フォールバック処理
+            setTimeout(() => {
+              if (window.location.pathname !== redirectTo) {
+                console.warn('Redirect may have failed, trying again...')
+                window.location.href = redirectTo
+              }
+            }, 1000)
+          } catch (err) {
+            console.error('Redirect error:', err)
+            window.location.href = redirectTo
+          }
         } else {
           console.warn('No session found after wait, but proceeding with redirect anyway')
           // セッションが取得できなくても、signInWithPasswordのレスポンスにセッションがあるので
           // リダイレクトを試みる（クッキーは既に設定されている可能性が高い）
           // セッションが確立されるまで少し待機
           await new Promise((resolve) => setTimeout(resolve, 200))
-          window.location.href = redirectTo
+          try {
+            window.location.replace(redirectTo)
+            setTimeout(() => {
+              if (window.location.pathname !== redirectTo) {
+                console.warn('Redirect may have failed, trying again...')
+                window.location.href = redirectTo
+              }
+            }, 1000)
+          } catch (err) {
+            console.error('Redirect error:', err)
+            window.location.href = redirectTo
+          }
         }
       } else {
         console.error('No session in response')
@@ -90,6 +315,22 @@ function LoginContent() {
       setErrorMessage('予期しないエラーが発生しました: ' + (err instanceof Error ? err.message : String(err)))
       setLoading(false)
     }
+  }
+
+  // 認証確認中の場合はローディング画面を表示
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
+        <div className="w-full max-w-md">
+          <div className="bg-white rounded-xl shadow-md p-8">
+            <div className="mb-8 text-center">
+              <Logo />
+              <p className="mt-4 text-gray-600">アカウント確認中...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
