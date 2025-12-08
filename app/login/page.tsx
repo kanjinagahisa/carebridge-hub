@@ -26,7 +26,20 @@ function LoginContent() {
       const { data: { session: existingSession } } = await supabase.auth.getSession()
       if (existingSession) {
         console.log('[Login] Existing session found, redirecting to home')
-        window.location.replace('/home')
+        // リダイレクトを確実に実行するため、即座に実行
+        try {
+          window.location.href = '/home'
+          // リダイレクトが実行されない場合に備えて、フォールバック処理
+          setTimeout(() => {
+            if (window.location.pathname !== '/home') {
+              console.warn('Redirect may have failed, trying window.location.replace...')
+              window.location.replace('/home')
+            }
+          }, 100)
+        } catch (err) {
+          console.error('Redirect error:', err)
+          window.location.replace('/home')
+        }
         return
       }
       
@@ -101,12 +114,23 @@ function LoginContent() {
           
           if (data.session) {
             console.log('[Login] Session established for signup confirmation')
-            // セッション確立後、ホーム画面にリダイレクト
+            // セッション確立後、即座にホーム画面にリダイレクト
             // URLフラグメントを削除してクリーンなURLに
             window.history.replaceState(null, '', '/login')
-            setSuccessMessage('アカウント登録が完了しました。')
-            await new Promise((resolve) => setTimeout(resolve, 1000))
-            window.location.replace('/home')
+            // リダイレクトを確実に実行
+            try {
+              window.location.href = '/home'
+              // リダイレクトが実行されない場合に備えて、フォールバック処理
+              setTimeout(() => {
+                if (window.location.pathname !== '/home') {
+                  console.warn('Redirect may have failed, trying window.location.replace...')
+                  window.location.replace('/home')
+                }
+              }, 100)
+            } catch (err) {
+              console.error('Redirect error:', err)
+              window.location.replace('/home')
+            }
             return
           } else {
             setErrorMessage('セッションの確立に失敗しました。')
@@ -133,9 +157,19 @@ function LoginContent() {
             console.log('[Login] Session already established from code')
             // URLパラメータを削除してクリーンなURLに
             window.history.replaceState(null, '', '/login')
-            setSuccessMessage('アカウント登録が完了しました。')
-            await new Promise((resolve) => setTimeout(resolve, 1000))
-            window.location.replace('/home')
+            // リダイレクトを確実に実行
+            try {
+              window.location.href = '/home'
+              setTimeout(() => {
+                if (window.location.pathname !== '/home') {
+                  console.warn('Redirect may have failed, trying window.location.replace...')
+                  window.location.replace('/home')
+                }
+              }, 100)
+            } catch (err) {
+              console.error('Redirect error:', err)
+              window.location.replace('/home')
+            }
             return
           } else {
             // セッションが確立されていない場合、少し待ってから再確認
@@ -145,9 +179,19 @@ function LoginContent() {
             if (retrySession) {
               // URLパラメータを削除してクリーンなURLに
               window.history.replaceState(null, '', '/login')
-              setSuccessMessage('アカウント登録が完了しました。')
-              await new Promise((resolve) => setTimeout(resolve, 1000))
-              window.location.replace('/home')
+              // リダイレクトを確実に実行
+              try {
+                window.location.href = '/home'
+                setTimeout(() => {
+                  if (window.location.pathname !== '/home') {
+                    console.warn('Redirect may have failed, trying window.location.replace...')
+                    window.location.replace('/home')
+                  }
+                }, 100)
+              } catch (err) {
+                console.error('Redirect error:', err)
+                window.location.replace('/home')
+              }
               return
             } else {
               console.warn('[Login] No session found for code parameter')
@@ -182,9 +226,19 @@ function LoginContent() {
             console.log('[Login] Session established for signup confirmation')
             // URLパラメータを削除してクリーンなURLに
             window.history.replaceState(null, '', '/login')
-            setSuccessMessage('アカウント登録が完了しました。')
-            await new Promise((resolve) => setTimeout(resolve, 1000))
-            window.location.replace('/home')
+            // リダイレクトを確実に実行
+            try {
+              window.location.href = '/home'
+              setTimeout(() => {
+                if (window.location.pathname !== '/home') {
+                  console.warn('Redirect may have failed, trying window.location.replace...')
+                  window.location.replace('/home')
+                }
+              }, 100)
+            } catch (err) {
+              console.error('Redirect error:', err)
+              window.location.replace('/home')
+            }
             return
           } else {
             setErrorMessage('セッションの確立に失敗しました。')
