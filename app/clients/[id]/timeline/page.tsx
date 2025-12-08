@@ -206,7 +206,7 @@ export default async function ClientTimelinePage({
     // 添付ファイルのfile_urlを正規化（署名付きURLの場合はStorageパスに変換）
     // 署名付きURLの生成は Client Component 側で行う（セッションが確実に利用可能なため）
     if (postsWithAuthors && postsWithAuthors.length > 0) {
-      for (const post of posts) {
+      for (const post of postsWithAuthors) {
         if (post.attachments && Array.isArray(post.attachments) && post.attachments.length > 0) {
           for (const attachment of post.attachments) {
             if (attachment.file_url) {
