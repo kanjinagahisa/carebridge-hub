@@ -55,8 +55,8 @@ export default function InviteAcceptPage() {
             message: inviteError.message,
             details: inviteError.details,
             hint: inviteError.hint,
-            status: inviteError.status,
-            statusText: inviteError.statusText,
+            status: (inviteError as any).status,
+            statusText: (inviteError as any).statusText,
           })
           // エラーオブジェクト全体をJSON形式で出力（デバッグ用）
           try {
