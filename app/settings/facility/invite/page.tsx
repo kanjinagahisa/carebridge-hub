@@ -121,9 +121,27 @@ function InviteCreateContent() {
 
       if (inviteError) throw inviteError
 
-      // 招待リンクを生成
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
+      // 招待リンクを生成（現在のブラウザのURLを使用）
+      // 'use client'コンポーネントなので、window.locationは常に利用可能
+      // より確実にoriginを取得するため、複数の方法を試す
+      let appUrl: string
+      if (typeof window !== 'undefined') {
+        appUrl = window.location.origin || `${window.location.protocol}//${window.location.host}`
+      } else {
+        // フォールバック（通常は実行されない）
+        appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://carebridge-hub.vercel.app'
+      }
+      
       const inviteLink = `${appUrl}/invite/${code}`
+      
+      // デバッグ用（本番環境では削除可能）
+      console.log('[Invite] Generated invite link:', {
+        origin: window.location.origin,
+        protocol: window.location.protocol,
+        host: window.location.host,
+        appUrl,
+        inviteLink
+      })
 
       setInviteCode(inviteLink)
     } catch (err: any) {
