@@ -90,25 +90,11 @@ export default function SignupPage() {
       return
     }
 
-    // 既存ユーザーのチェック: セッションがなく、かつユーザーの作成日時を確認
+    // 既存ユーザーのチェック: セッションがなく、かつpublic.usersテーブルをチェック
     // SupabaseのsignUpは既存ユーザーの場合でもエラーを返さないことがあるため、
-    // セッションが作成されない場合、ユーザーのcreated_atを確認して既存ユーザーかどうかを判断
+    // セッションが作成されない場合、public.usersテーブルに既にレコードが存在するかチェック
     if (!authData.session) {
-      // ユーザーのcreated_atを確認（既存ユーザーの場合、作成日時が現在時刻から大きく離れている）
-      const userCreatedAt = authData.user.created_at ? new Date(authData.user.created_at) : null
-      const now = new Date()
-      const timeDiff = userCreatedAt ? (now.getTime() - userCreatedAt.getTime()) / 1000 : 0 // 秒単位
-      
-      console.log('[Signup] Checking user creation time:', {
-        userCreatedAt: userCreatedAt?.toISOString(),
-        now: now.toISOString(),
-        timeDiffSeconds: timeDiff,
-        emailConfirmedAt: authData.user.email_confirmed_at,
-      })
-      
-      // 既存ユーザーの判定:
-      // 1. email_confirmed_atが存在する場合（既に確認済み）
-      // 2. または、ユーザーの作成日時が現在時刻から5秒以上離れている場合（既存ユーザーの可能性が高い）
+      // email_confirmed_atが存在する場合は既存ユーザー
       if (authData.user.email_confirmed_at) {
         console.log('[Signup] Existing user detected: email_confirmed_at exists')
         setError('このメールアドレスは既に登録されています。ログインしてください。')
@@ -116,13 +102,44 @@ export default function SignupPage() {
         return
       }
       
-      // ユーザーの作成日時が現在時刻から5秒以上離れている場合、既存ユーザーの可能性が高い
-      // （新規ユーザーの場合、作成日時は現在時刻に非常に近いはず）
-      if (timeDiff > 5) {
-        console.log('[Signup] Existing user detected: user created more than 5 seconds ago')
-        setError('このメールアドレスは既に登録されています。ログインしてください。')
-        setLoading(false)
-        return
+      // public.usersテーブルをチェックして、既存ユーザーかどうかを確認
+      // 新規ユーザーの場合、Database Triggerがpublic.usersテーブルにレコードを作成するため、
+      // 少し待ってからチェックする必要がある
+      await new Promise(resolve => setTimeout(resolve, 100))
+      
+      const { data: existingUser, error: userCheckError } = await supabase
+        .from('users')
+        .select('id, email, created_at')
+        .eq('email', formData.email)
+        .eq('deleted', false)
+        .maybeSingle()
+      
+      console.log('[Signup] Checking existing user in public.users:', {
+        existingUser,
+        userCheckError,
+      })
+      
+      // public.usersテーブルに既にレコードが存在する場合、既存ユーザーの可能性が高い
+      // ただし、新規ユーザーの場合もDatabase Triggerがレコードを作成するため、
+      // created_atが現在時刻から2秒以上離れている場合のみ既存ユーザーと判断
+      if (existingUser && !userCheckError) {
+        const userCreatedAt = existingUser.created_at ? new Date(existingUser.created_at) : null
+        const now = new Date()
+        const timeDiff = userCreatedAt ? (now.getTime() - userCreatedAt.getTime()) / 1000 : 0 // 秒単位
+        
+        console.log('[Signup] User creation time check:', {
+          userCreatedAt: userCreatedAt?.toISOString(),
+          now: now.toISOString(),
+          timeDiffSeconds: timeDiff,
+        })
+        
+        // created_atが現在時刻から2秒以上離れている場合、既存ユーザーと判断
+        if (timeDiff > 2) {
+          console.log('[Signup] Existing user detected: user created more than 2 seconds ago in public.users')
+          setError('このメールアドレスは既に登録されています。ログインしてください。')
+          setLoading(false)
+          return
+        }
       }
     }
 
