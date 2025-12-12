@@ -18,6 +18,7 @@ export default function SignupPage() {
   const [error, setError] = useState('')
   const [passwordErrors, setPasswordErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -36,6 +37,13 @@ export default function SignupPage() {
 
     const supabase = createClient()
 
+    console.log('[Signup] Starting signup process:', {
+      email: formData.email,
+      displayName: formData.displayName,
+      profession: formData.profession,
+      redirectTo: `${window.location.origin}/login`,
+    })
+
     // 1. 認証ユーザーを作成
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: formData.email,
@@ -49,13 +57,21 @@ export default function SignupPage() {
       },
     })
 
+    console.log('[Signup] Signup response:', {
+      user: authData?.user ? { id: authData.user.id, email: authData.user.email, confirmed: authData.user.email_confirmed_at } : null,
+      session: authData?.session ? 'exists' : 'null',
+      error: authError,
+    })
+
     if (authError) {
+      console.error('[Signup] Signup error:', authError)
       setError(authError.message)
       setLoading(false)
       return
     }
 
     if (!authData.user) {
+      console.error('[Signup] No user in response')
       setError('ユーザー作成に失敗しました')
       setLoading(false)
       return
@@ -64,11 +80,15 @@ export default function SignupPage() {
     // 2. Database Triggerが自動的にusersテーブルにレコードを作成するため、
     //    手動でのINSERTは不要です。セッションが確立されている場合はホームに遷移
     if (authData.session) {
+      console.log('[Signup] Session exists, redirecting to home')
       router.push('/home')
       router.refresh()
     } else {
       // メール確認が必要な場合
       // Database Triggerによりusersテーブルには既にレコードが作成されています
+      console.log('[Signup] No session - email confirmation required')
+      console.log('[Signup] User email confirmation status:', authData.user.email_confirmed_at)
+      console.log('[Signup] Check Supabase Dashboard -> Authentication -> Users for email confirmation status')
       setError('success')
       setLoading(false)
     }
@@ -147,7 +167,7 @@ export default function SignupPage() {
               <input
                 id="password"
                 name="password"
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 value={formData.password}
                 onChange={(e) => {
                   setFormData({ ...formData, password: e.target.value })
@@ -158,6 +178,19 @@ export default function SignupPage() {
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 placeholder="パスワードを入力"
               />
+              <div className="mt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="showPassword"
+                    name="showPassword"
+                    checked={showPassword}
+                    onChange={(e) => setShowPassword(e.target.checked)}
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-2 focus:ring-primary"
+                  />
+                  <span className="text-sm text-gray-600">パスワードを表示する</span>
+                </label>
+              </div>
               <p className="mt-1 text-xs text-gray-500">
                 {getPasswordStrengthDescription()}
               </p>
