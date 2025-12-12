@@ -9,7 +9,6 @@ import { ROLES, PROFESSIONS } from '@/lib/constants'
 
 export default function InviteAcceptPage() {
   const params = useParams()
-  const router = useRouter()
   const code = params.code as string
 
   const [isLoading, setIsLoading] = useState(true)
@@ -24,6 +23,19 @@ export default function InviteAcceptPage() {
   const [isAlreadyMember, setIsAlreadyMember] = useState(false)
   const [isAccepted, setIsAccepted] = useState(false)
   const [user, setUser] = useState<any>(null)
+  const router = useRouter()
+
+  // 参加完了後、自動的にホームにリダイレクト
+  useEffect(() => {
+    if (isAccepted) {
+      const timer = setTimeout(() => {
+        // 完全なページリロードを行い、サーバー側で最新のデータを取得する
+        window.location.href = '/home'
+      }, 1000) // 1秒待機してデータベースの更新を確実に反映させる
+
+      return () => clearTimeout(timer)
+    }
+  }, [isAccepted])
 
   useEffect(() => {
     const checkInvite = async () => {
@@ -150,13 +162,6 @@ export default function InviteAcceptPage() {
           }
         }
 
-        // 使用済みかチェック
-        if (invite.used) {
-          setError('この招待リンクは既に使用されています。')
-          setIsLoading(false)
-          return
-        }
-
         // キャンセルされているかチェック
         if (invite.cancelled) {
           setError('この招待リンクは無効になっています。')
@@ -165,6 +170,7 @@ export default function InviteAcceptPage() {
         }
 
         // ログイン済みユーザーの場合、すでに所属しているか確認
+        // 使用済みチェックより先に確認することで、使用済みでも既に参加している場合は適切に処理できる
         if (currentUser) {
           const { data: existingRole } = await supabase
             .from('user_facility_roles')
@@ -175,10 +181,18 @@ export default function InviteAcceptPage() {
             .maybeSingle()
 
           if (existingRole) {
+            // 既に参加している場合は、使用済みでも「既に参加済み」として処理
             setIsAlreadyMember(true)
             setIsLoading(false)
             return
           }
+        }
+
+        // 使用済みかチェック（既に参加している場合は上で処理済み）
+        if (invite.used) {
+          setError('この招待リンクは既に使用されています。')
+          setIsLoading(false)
+          return
         }
 
         setInviteData({
@@ -383,13 +397,10 @@ export default function InviteAcceptPage() {
             <p className="text-sm text-gray-600 mb-4">
               ホーム画面からグループや利用者の情報を確認できます。
             </p>
+            <p className="text-xs text-gray-500 mt-2">
+              ホーム画面に移動しています...
+            </p>
           </div>
-          <Link
-            href="/home"
-            className="block w-full px-4 py-2 text-sm font-medium text-center text-white bg-primary rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            ホームへ
-          </Link>
         </div>
       </div>
     )
