@@ -90,6 +90,42 @@ export default function SignupPage() {
       return
     }
 
+    // 既存ユーザーのチェック: セッションがなく、かつユーザーの作成日時を確認
+    // SupabaseのsignUpは既存ユーザーの場合でもエラーを返さないことがあるため、
+    // セッションが作成されない場合、ユーザーのcreated_atを確認して既存ユーザーかどうかを判断
+    if (!authData.session) {
+      // ユーザーのcreated_atを確認（既存ユーザーの場合、作成日時が現在時刻から大きく離れている）
+      const userCreatedAt = authData.user.created_at ? new Date(authData.user.created_at) : null
+      const now = new Date()
+      const timeDiff = userCreatedAt ? (now.getTime() - userCreatedAt.getTime()) / 1000 : 0 // 秒単位
+      
+      console.log('[Signup] Checking user creation time:', {
+        userCreatedAt: userCreatedAt?.toISOString(),
+        now: now.toISOString(),
+        timeDiffSeconds: timeDiff,
+        emailConfirmedAt: authData.user.email_confirmed_at,
+      })
+      
+      // 既存ユーザーの判定:
+      // 1. email_confirmed_atが存在する場合（既に確認済み）
+      // 2. または、ユーザーの作成日時が現在時刻から5秒以上離れている場合（既存ユーザーの可能性が高い）
+      if (authData.user.email_confirmed_at) {
+        console.log('[Signup] Existing user detected: email_confirmed_at exists')
+        setError('このメールアドレスは既に登録されています。ログインしてください。')
+        setLoading(false)
+        return
+      }
+      
+      // ユーザーの作成日時が現在時刻から5秒以上離れている場合、既存ユーザーの可能性が高い
+      // （新規ユーザーの場合、作成日時は現在時刻に非常に近いはず）
+      if (timeDiff > 5) {
+        console.log('[Signup] Existing user detected: user created more than 5 seconds ago')
+        setError('このメールアドレスは既に登録されています。ログインしてください。')
+        setLoading(false)
+        return
+      }
+    }
+
     // 2. Database Triggerが自動的にusersテーブルにレコードを作成するため、
     //    手動でのINSERTは不要です。セッションが確立されている場合はホームに遷移
     if (authData.session) {
@@ -97,7 +133,7 @@ export default function SignupPage() {
       router.push('/home')
       router.refresh()
     } else {
-      // メール確認が必要な場合
+      // メール確認が必要な場合（新規ユーザー）
       // Database Triggerによりusersテーブルには既にレコードが作成されています
       console.log('[Signup] No session - email confirmation required')
       console.log('[Signup] User email confirmation status:', authData.user.email_confirmed_at)
