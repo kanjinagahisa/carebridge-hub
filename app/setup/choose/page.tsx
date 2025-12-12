@@ -8,9 +8,10 @@ import Logo from '@/components/Logo'
 export const dynamic = 'force-dynamic'
 
 export default async function SetupChoosePage() {
-  console.log('[SetupChoosePage] Starting...')
-  
+  // ログを同期的に出力するために、エラーハンドリングの前に出力
   try {
+    console.log('[SetupChoosePage] ========================================')
+    console.log('[SetupChoosePage] Starting...')
     const supabase = await createClient()
     console.log('[SetupChoosePage] Supabase client created')
 
@@ -132,10 +133,19 @@ export default async function SetupChoosePage() {
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
     console.log('[SetupChoosePage] User facility IDs:', facilityIds)
+    console.log('[SetupChoosePage] User facilities count:', facilityIds.length)
+    console.log('[SetupChoosePage] User facilities data:', JSON.stringify(userFacilities, null, 2))
 
     // 既に施設に所属している場合は、ホーム画面にリダイレクト
     if (facilityIds.length > 0) {
+      console.log('[SetupChoosePage] ========================================')
+      console.log('[SetupChoosePage] REDIRECT CONDITION MET')
       console.log('[SetupChoosePage] User already has facilities, redirecting to home')
+      console.log('[SetupChoosePage] User ID:', user.id)
+      console.log('[SetupChoosePage] User Email:', user.email)
+      console.log('[SetupChoosePage] Facility IDs:', JSON.stringify(facilityIds))
+      console.log('[SetupChoosePage] About to call redirect("/home")')
+      // redirect()は例外を投げるため、try-catchでキャッチされないように注意
       redirect('/home')
     }
 
@@ -174,8 +184,21 @@ export default async function SetupChoosePage() {
         </div>
       </div>
     )
-  } catch (error) {
-    console.error('[SetupChoosePage] Error:', error)
+  } catch (error: any) {
+    // NEXT_REDIRECTは正常なリダイレクト処理なので、再スローする
+    if (error?.digest?.startsWith('NEXT_REDIRECT')) {
+      console.log('[SetupChoosePage] ========================================')
+      console.log('[SetupChoosePage] NEXT_REDIRECT detected in catch block')
+      console.log('[SetupChoosePage] Error digest:', error.digest)
+      console.log('[SetupChoosePage] Re-throwing NEXT_REDIRECT exception')
+      // リダイレクト例外を再スローして、Next.jsが正しくリダイレクトを処理できるようにする
+      throw error
+    }
+    console.error('[SetupChoosePage] ========================================')
+    console.error('[SetupChoosePage] Unexpected error (not NEXT_REDIRECT):', error)
+    console.error('[SetupChoosePage] Error type:', typeof error)
+    console.error('[SetupChoosePage] Error message:', error?.message)
+    console.error('[SetupChoosePage] Error stack:', error?.stack)
     // エラーが発生した場合も、セットアップ画面を表示
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
