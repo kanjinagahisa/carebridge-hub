@@ -45,10 +45,19 @@ export default function NewPostSummaryCard({ post, currentUserId, isUnread = fal
     ? bodyText.substring(0, 100) + '...'
     : bodyText
 
-  // リンク先を決定
+  // リンク先を決定（IDが存在することを確認）
   const linkHref = isClientPost 
-    ? `/clients/${post.client_id}/timeline`
-    : `/groups/${post.group_id}`
+    ? (post.client_id ? `/clients/${post.client_id}/timeline` : '#')
+    : (post.group_id ? `/groups/${post.group_id}` : '#')
+
+  // IDが存在しない場合はリンクを無効化
+  if (!post.client_id && !post.group_id) {
+    return (
+      <div className="bg-white rounded-xl shadow-sm p-4 opacity-50">
+        <p className="text-sm text-gray-600">投稿データが不完全です</p>
+      </div>
+    )
+  }
 
   return (
     <Link
@@ -70,7 +79,17 @@ export default function NewPostSummaryCard({ post, currentUserId, isUnread = fal
 
       {/* 投稿日時 */}
       <p className="text-xs text-gray-500 mb-2">
-        {format(new Date(post.created_at), 'yyyy年MM月dd日 HH:mm', { locale: ja })}
+        {(() => {
+          if (!post.created_at) return '日時不明'
+          try {
+            const date = new Date(post.created_at)
+            if (isNaN(date.getTime())) return '日時不明'
+            return format(date, 'yyyy年MM月dd日 HH:mm', { locale: ja })
+          } catch (error) {
+            console.error('[NewPostSummaryCard] Date format error:', error)
+            return '日時不明'
+          }
+        })()}
       </p>
 
       {/* 投稿本文（2〜3行で省略） */}
