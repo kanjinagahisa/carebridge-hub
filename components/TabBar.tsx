@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { Home, Users, UsersRound, Network, Menu } from 'lucide-react'
 
 const tabs = [
@@ -14,13 +15,25 @@ const tabs = [
 
 export default function TabBar() {
   const pathname = usePathname()
+  const [mounted, setMounted] = useState(false)
+
+  // クライアントサイドでのみマウント状態を管理（ハイドレーションエラー対策）
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
+  // マウント前はpathnameを使用しない（サーバーとクライアントで一致させる）
+  const getIsActive = (tabHref: string) => {
+    if (!mounted || !pathname) return false
+    return pathname === tabHref || pathname.startsWith(tabHref + '/')
+  }
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50">
       <div className="flex justify-around items-center h-16">
         {tabs.map((tab) => {
           const Icon = tab.icon
-          const isActive = pathname === tab.href || pathname?.startsWith(tab.href + '/')
+          const isActive = getIsActive(tab.href)
           return (
             <Link
               key={tab.href}

@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale/ja'
+import { useEffect, useState } from 'react'
 import { ThumbsUp, Eye } from 'lucide-react'
 import type { Post } from '@/types/carebridge'
 
@@ -23,6 +24,13 @@ interface NewPostSummaryCardProps {
  * グループ投稿と利用者投稿の両方に対応
  */
 export default function NewPostSummaryCard({ post, currentUserId, isUnread = false }: NewPostSummaryCardProps) {
+  const [mounted, setMounted] = useState(false)
+
+  // クライアントサイドでのみマウント状態を管理（ハイドレーションエラー対策）
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+
   const isClientPost = post.postType === 'client' || !!post.client_id
   const postName = isClientPost 
     ? (post.clients?.name || '利用者名不明')
@@ -59,6 +67,19 @@ export default function NewPostSummaryCard({ post, currentUserId, isUnread = fal
     )
   }
 
+  // 日付フォーマット関数（マウント後にのみ実行）
+  const formatDate = (dateString: string | null | undefined) => {
+    if (!mounted || !dateString) return '日時不明'
+    try {
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return '日時不明'
+      return format(date, 'yyyy年MM月dd日 HH:mm', { locale: ja })
+    } catch (error) {
+      console.error('[NewPostSummaryCard] Date format error:', error)
+      return '日時不明'
+    }
+  }
+
   return (
     <Link
       href={linkHref}
@@ -79,17 +100,7 @@ export default function NewPostSummaryCard({ post, currentUserId, isUnread = fal
 
       {/* 投稿日時 */}
       <p className="text-xs text-gray-500 mb-2">
-        {(() => {
-          if (!post.created_at) return '日時不明'
-          try {
-            const date = new Date(post.created_at)
-            if (isNaN(date.getTime())) return '日時不明'
-            return format(date, 'yyyy年MM月dd日 HH:mm', { locale: ja })
-          } catch (error) {
-            console.error('[NewPostSummaryCard] Date format error:', error)
-            return '日時不明'
-          }
-        })()}
+        {formatDate(post.created_at)}
       </p>
 
       {/* 投稿本文（2〜3行で省略） */}
