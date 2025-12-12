@@ -8,7 +8,7 @@
  *   現在のスキーマには存在しないため、`updateClient` では使用できません
  */
 
-import { createClient } from '@/lib/supabase/client'
+import { createClient as createSupabaseClient } from '@/lib/supabase/client'
 import type { Client, ClientDocument } from '@/types/carebridge'
 
 // ============================================================================
@@ -19,7 +19,7 @@ import type { Client, ClientDocument } from '@/types/carebridge'
  * 利用者IDで利用者情報を取得
  */
 export async function fetchClientById(clientId: string): Promise<Client | null> {
-  const supabase = createClient()
+  const supabase = createSupabaseClient()
   const { data, error } = await supabase
     .from('clients')
     .select('*')
@@ -41,7 +41,7 @@ export async function fetchClientById(clientId: string): Promise<Client | null> 
 export async function fetchClientDocuments(
   clientId: string
 ): Promise<ClientDocument[]> {
-  const supabase = createClient()
+  const supabase = createSupabaseClient()
   const { data, error } = await supabase
     .from('client_documents')
     .select('*')
@@ -55,6 +55,23 @@ export async function fetchClientDocuments(
   }
 
   return (data ?? []) as ClientDocument[]
+}
+
+/**
+ * 利用者情報の作成ペイロード型
+ * 
+ * 実際のスキーマに存在するフィールドのみを使用します：
+ * - facility_id (必須) - ユーザーの所属施設ID
+ * - name (必須)
+ * - kana, date_of_birth, memo, photo_url (任意)
+ */
+export type CreateClientPayload = {
+  facility_id: string
+  name: string
+  kana?: string | null
+  date_of_birth?: string | null
+  memo?: string | null
+  photo_url?: string | null
 }
 
 /**
@@ -78,6 +95,60 @@ export type UpdateClientPayload = Partial<
 >
 
 /**
+ * 新しい利用者を作成
+ * 
+ * 実際のスキーマに存在するフィールドのみを使用します：
+ * - facility_id (必須)
+ * - name (必須)
+ * - kana, date_of_birth, memo, photo_url (任意)
+ * 
+ * @param payload - 利用者情報
+ * @returns 作成された利用者情報
+ */
+export async function createClient(
+  payload: CreateClientPayload
+): Promise<Client> {
+  const supabase = createSupabaseClient()
+
+  // 必須フィールドのバリデーション
+  if (!payload.facility_id || !payload.name?.trim()) {
+    throw new Error('施設IDと利用者名は必須です')
+  }
+
+  // 実際のスキーマに存在するフィールドのみを抽出
+  const insertData: Record<string, any> = {
+    facility_id: payload.facility_id,
+    name: payload.name.trim(),
+  }
+  
+  if (payload.kana !== undefined && payload.kana !== null) {
+    insertData.kana = payload.kana.trim() || null
+  }
+  if (payload.date_of_birth !== undefined && payload.date_of_birth !== null) {
+    insertData.date_of_birth = payload.date_of_birth.trim() || null
+  }
+  if (payload.memo !== undefined && payload.memo !== null) {
+    insertData.memo = payload.memo.trim() || null
+  }
+  if (payload.photo_url !== undefined && payload.photo_url !== null) {
+    insertData.photo_url = payload.photo_url.trim() || null
+  }
+
+  const { data, error } = await supabase
+    .from('clients')
+    .insert(insertData)
+    .select()
+    .single()
+
+  if (error) {
+    console.error('createClient error', error)
+    throw error
+  }
+
+  return data as Client
+}
+
+/**
  * 利用者情報を更新
  * 
  * 実際のスキーマに存在するフィールドのみを更新します：
@@ -87,7 +158,7 @@ export async function updateClient(
   clientId: string,
   payload: UpdateClientPayload
 ): Promise<void> {
-  const supabase = createClient()
+  const supabase = createSupabaseClient()
 
   // 実際のスキーマに存在するフィールドのみを抽出
   const updateData: Record<string, any> = {}
@@ -121,7 +192,7 @@ export async function uploadClientDocument(
   file: File,
   options?: { type?: string }
 ): Promise<ClientDocument> {
-  const supabase = createClient()
+  const supabase = createSupabaseClient()
 
   // ファイル拡張子を取得
   const ext = file.name.split('.').pop() ?? 'dat'
@@ -166,7 +237,7 @@ export async function uploadClientDocument(
  * Storage からファイルを削除し、データベースからもレコードを削除します。
  */
 export async function deleteClientDocument(doc: ClientDocument): Promise<void> {
-  const supabase = createClient()
+  const supabase = createSupabaseClient()
 
   // 1) Storage から削除
   const { error: storageError } = await supabase.storage
@@ -199,7 +270,7 @@ export async function deleteClientDocument(doc: ClientDocument): Promise<void> {
  * @returns ダウンロードURL（有効期限付き）
  */
 export async function getClientDocumentUrl(doc: ClientDocument): Promise<string> {
-  const supabase = createClient()
+  const supabase = createSupabaseClient()
   const { data } = await supabase.storage
     .from('client-documents')
     .createSignedUrl(doc.path, 3600) // 1時間有効
@@ -210,6 +281,10 @@ export async function getClientDocumentUrl(doc: ClientDocument): Promise<string>
 
   return data.signedUrl
 }
+
+
+
+
 
 
 

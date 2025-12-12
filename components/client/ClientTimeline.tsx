@@ -158,8 +158,15 @@ export default function ClientTimeline({
         // データが null または undefined の場合、エラーとして扱い既存の投稿を維持
         console.warn('Posts data is null/undefined, keeping existing posts to prevent data loss')
       } else {
-        // 空の配列が返された場合、RLSポリシーの問題の可能性があるため既存の投稿を維持
-        console.warn('No posts loaded (empty array), but keeping existing posts to prevent data loss. This may indicate an RLS policy issue.')
+        // 空の配列が返された場合
+        // 初回表示時（既存の投稿がない場合）は正常な動作なので警告を出さない
+        // 既存の投稿があるのに空の配列が返された場合はRLSポリシーの問題の可能性がある
+        if (posts.length > 0) {
+          console.warn('No posts loaded (empty array), but keeping existing posts to prevent data loss. This may indicate an RLS policy issue.')
+        } else {
+          // 初回表示で投稿がない場合は正常（新規利用者など）
+          setPosts([])
+        }
       }
     } catch (error) {
       console.error('Failed to load posts:', error)
