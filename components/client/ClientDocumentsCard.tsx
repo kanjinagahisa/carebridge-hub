@@ -68,6 +68,34 @@ export default function ClientDocumentsCard({
     const file = e.target.files?.[0]
     if (!file) return
 
+    // ファイルタイプのバリデーション（クライアント側）
+    const allowedTypes = [
+      // 画像
+      'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+      'image/heic', 'image/heif',
+      // 動画
+      'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-ms-wmv',
+      // ドキュメント
+      'application/pdf',
+      'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ]
+    const allowedExtensions = ['.pdf', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.heic', '.heif', '.mp4', '.mov', '.avi', '.wmv', '.doc', '.docx']
+    
+    const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+    const isAllowedType = allowedTypes.includes(file.type) || 
+                          allowedExtensions.includes(fileExtension) ||
+                          file.type.startsWith('image/') ||
+                          file.type.startsWith('video/')
+
+    if (!isAllowedType) {
+      alert('このファイル形式はサポートされていません。\n対応形式: PDF, 画像（JPG/PNG/HEIC等）, 動画（MP4/MOV等）, Word（DOC/DOCX）')
+      // ファイル入力をリセット
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+      return
+    }
+
     setIsUploading(true)
     try {
       await uploadClientDocument(client.id, file)
@@ -146,7 +174,10 @@ export default function ClientDocumentsCard({
           type="file"
           onChange={handleFileSelect}
           className="hidden"
-          accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+          // accept属性を*/*に設定（すべてのファイルタイプを許可）
+          // macOSのファイル選択ダイアログの制限を回避するため
+          // クライアント側でバリデーションを行う（handleFileSelect内）
+          accept="*/*"
         />
 
         {isLoading ? (
