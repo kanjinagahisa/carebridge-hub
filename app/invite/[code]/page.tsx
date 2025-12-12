@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { CheckCircle, XCircle, LogIn } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { ROLES } from '@/lib/constants'
+import { ROLES, PROFESSIONS } from '@/lib/constants'
 
 export default function InviteAcceptPage() {
   const params = useParams()
@@ -224,6 +224,52 @@ export default function InviteAcceptPage() {
         return
       }
 
+      // public.usersテーブルにユーザーが存在するか確認
+      const { data: existingUser, error: userCheckError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      // ユーザーが存在しない場合は作成する
+      if (!existingUser) {
+        console.log('[InviteAcceptPage] User not found in public.users, creating...', {
+          user_id: user.id,
+          email: user.email,
+          user_metadata: user.user_metadata,
+        })
+
+        // user_metadataから情報を取得、なければデフォルト値を使用
+        const displayName =
+          user.user_metadata?.display_name ||
+          user.email?.split('@')[0] ||
+          'ユーザー'
+        const profession =
+          user.user_metadata?.profession || PROFESSIONS.OTHER
+
+        const { error: userInsertError } = await supabase
+          .from('users')
+          .insert({
+            id: user.id,
+            email: user.email || '',
+            display_name: displayName,
+            profession: profession,
+          })
+
+        if (userInsertError) {
+          console.error('[InviteAcceptPage] Failed to create user in public.users:', userInsertError)
+          // 外部キー制約エラー（23503）の場合は、ユーザー作成に失敗したことを示す
+          if (userInsertError.code === '23503') {
+            setError('ユーザー情報の作成に失敗しました。管理者にお問い合わせください。')
+            setIsProcessing(false)
+            return
+          }
+          throw userInsertError
+        }
+
+        console.log('[InviteAcceptPage] User created in public.users successfully')
+      }
+
       // user_facility_rolesに追加（roleはinvite_codesから取得）
       const { error: insertError } = await supabase
         .from('user_facility_roles')
@@ -237,6 +283,12 @@ export default function InviteAcceptPage() {
         // 重複エラーの場合は既に所属しているとみなす
         if (insertError.code === '23505') {
           setIsAlreadyMember(true)
+          setIsProcessing(false)
+          return
+        }
+        // 外部キー制約エラー（23503）の場合もエラーメッセージを表示
+        if (insertError.code === '23503') {
+          setError('ユーザー情報が見つかりませんでした。ページを再読み込みしてお試しください。')
           setIsProcessing(false)
           return
         }

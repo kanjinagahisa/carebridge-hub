@@ -28,7 +28,7 @@ export default function SetupChoosePage() {
 
             <Link href="/setup/join">
               <button className="w-full border border-gray-300 text-gray-800 py-3 rounded-lg font-medium hover:bg-gray-50 transition-colors">
-                招待コードで既存施設に参加する
+                招待リンクで既存施設に参加する
               </button>
             </Link>
           </div>
