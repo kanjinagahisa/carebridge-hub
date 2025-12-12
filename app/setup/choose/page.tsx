@@ -8,19 +8,77 @@ import Logo from '@/components/Logo'
 export const dynamic = 'force-dynamic'
 
 export default async function SetupChoosePage() {
+  console.log('[SetupChoosePage] Starting...')
+  
   try {
     const supabase = await createClient()
+    console.log('[SetupChoosePage] Supabase client created')
 
-    // ユーザー認証を確認
-    const {
-      data: { user },
-      error: getUserError,
-    } = await supabase.auth.getUser()
+    // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
+    const { cookies } = await import('next/headers')
+    const cookieStore = await cookies()
+    const authCookies = cookieStore.getAll().filter((cookie) =>
+      cookie.name.includes('sb-') || cookie.name.includes('auth-token')
+    )
 
-    // ログインしていない場合は、そのままセットアップ画面を表示（ログインページへのリダイレクトはミドルウェアで処理）
-    if (getUserError || !user) {
-      // 未ログインの場合はセットアップ画面を表示
-      return (
+    let user: any = null
+
+    if (authCookies.length > 0) {
+      const authTokenCookie = authCookies.find((c) => c.name.includes('auth-token'))
+      if (authTokenCookie && authTokenCookie.value) {
+        try {
+          let cookieValue = authTokenCookie.value
+          if (cookieValue.startsWith('%')) {
+            cookieValue = decodeURIComponent(cookieValue)
+            console.log('[SetupChoosePage] Cookie value URL decoded')
+          }
+
+          if (cookieValue.startsWith('{')) {
+            const sessionData = JSON.parse(cookieValue)
+            if (sessionData.access_token && sessionData.refresh_token) {
+              console.log('[SetupChoosePage] Attempting to set session from cookie')
+              const { data: setSessionData, error: setSessionError } =
+                await supabase.auth.setSession({
+                  access_token: sessionData.access_token,
+                  refresh_token: sessionData.refresh_token,
+                })
+              if (setSessionError) {
+                console.error(
+                  '[SetupChoosePage] Error setting session from cookie:',
+                  setSessionError.message
+                )
+              } else if (setSessionData?.user) {
+                console.log(
+                  '[SetupChoosePage] Session set from cookie successfully, user:',
+                  setSessionData.user.email
+                )
+                user = setSessionData.user
+              }
+            }
+          }
+        } catch (err) {
+          console.error('[SetupChoosePage] Error processing cookie value:', err)
+        }
+      }
+    }
+
+    // セッションが設定できなかった場合、getUser()を試す
+    if (!user) {
+      const {
+        data: { user: getUserResult },
+        error: getUserError,
+      } = await supabase.auth.getUser()
+
+      console.log('[SetupChoosePage] getUser result:', {
+        hasUser: !!getUserResult,
+        userId: getUserResult?.id,
+        getUserError: getUserError?.message,
+      })
+
+      if (getUserError || !getUserResult) {
+        console.log('[SetupChoosePage] No user found, showing setup page')
+        // 未ログインの場合はセットアップ画面を表示
+        return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
           <div className="w-full max-w-md">
             <div className="bg-white rounded-xl shadow-md p-8">
@@ -52,10 +110,16 @@ export default async function SetupChoosePage() {
           </div>
         </div>
       )
+      }
+
+      user = getUserResult
     }
+
+    console.log('[SetupChoosePage] User authenticated:', user.id, user.email)
 
     // ログイン済みの場合、既に施設に所属しているかチェック
     const adminSupabase = createAdminClient()
+    console.log('[SetupChoosePage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id')
@@ -67,12 +131,15 @@ export default async function SetupChoosePage() {
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
+    console.log('[SetupChoosePage] User facility IDs:', facilityIds)
 
     // 既に施設に所属している場合は、ホーム画面にリダイレクト
     if (facilityIds.length > 0) {
       console.log('[SetupChoosePage] User already has facilities, redirecting to home')
       redirect('/home')
     }
+
+    console.log('[SetupChoosePage] User has no facilities, showing setup page')
 
     // 施設に所属していない場合のみ、セットアップ画面を表示
     return (
