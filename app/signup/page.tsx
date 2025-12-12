@@ -65,7 +65,20 @@ export default function SignupPage() {
 
     if (authError) {
       console.error('[Signup] Signup error:', authError)
-      setError(authError.message)
+      
+      // 既存ユーザーのエラーメッセージをチェック
+      const errorMessage = authError.message.toLowerCase()
+      if (
+        errorMessage.includes('already registered') ||
+        errorMessage.includes('user already exists') ||
+        errorMessage.includes('email already registered') ||
+        errorMessage.includes('already exists')
+      ) {
+        setError('このメールアドレスは既に登録されています。ログインしてください。')
+      } else {
+        setError(authError.message)
+      }
+      
       setLoading(false)
       return
     }
