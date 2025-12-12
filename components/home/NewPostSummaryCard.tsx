@@ -28,19 +28,22 @@ export default function NewPostSummaryCard({ post, currentUserId, isUnread = fal
     ? (post.clients?.name || '利用者名不明')
     : (post.groups?.name || 'グループ名不明')
   const authorName = post.author?.display_name || '不明なユーザー'
-  const likeCount = post.reactions?.filter((r) => r.type === 'like').length || 0
-  const readCount = post.reads?.length || 0
+  const likeCount = (post.reactions && Array.isArray(post.reactions)) 
+    ? post.reactions.filter((r) => r && r.type === 'like').length 
+    : 0
+  const readCount = (post.reads && Array.isArray(post.reads)) ? post.reads.length : 0
   
   // 現在のユーザーが既読かどうかを判定
-  const isReadByCurrentUser = currentUserId 
-    ? post.reads?.some((r: any) => r.user_id === currentUserId) || false
+  const isReadByCurrentUser = currentUserId && post.reads && Array.isArray(post.reads)
+    ? post.reads.some((r: any) => r && r.user_id === currentUserId)
     : false
   const showUnreadBadge = isUnread || (!isReadByCurrentUser && currentUserId)
 
   // 投稿本文を2〜3行で省略（最大100文字）
-  const bodyPreview = post.body.length > 100
-    ? post.body.substring(0, 100) + '...'
-    : post.body
+  const bodyText = post.body || ''
+  const bodyPreview = bodyText.length > 100
+    ? bodyText.substring(0, 100) + '...'
+    : bodyText
 
   // リンク先を決定
   const linkHref = isClientPost 
