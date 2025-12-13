@@ -399,7 +399,20 @@ function LoginContent() {
       // error があれば setErrorMessage に保存し、画面に表示する
       if (error) {
         console.error('Login error:', error)
-        setErrorMessage(error.message)
+        
+        // エラーメッセージを日本語に変換
+        let japaneseMessage = error.message
+        if (error.message === 'Invalid login credentials' || error.message.includes('Invalid login credentials')) {
+          japaneseMessage = 'メールアドレスまたはパスワードが正しくありません。'
+        } else if (error.message.includes('Email not confirmed') || error.message.includes('email_not_confirmed')) {
+          japaneseMessage = 'メールアドレスの確認が完了していません。確認メールをご確認ください。'
+        } else if (error.message.includes('Too many requests')) {
+          japaneseMessage = 'ログイン試行回数が多すぎます。しばらく時間をおいてから再度お試しください。'
+        } else if (error.message.includes('User not found')) {
+          japaneseMessage = 'このメールアドレスは登録されていません。'
+        }
+        
+        setErrorMessage(japaneseMessage)
         setLoading(false)
         return
       }
