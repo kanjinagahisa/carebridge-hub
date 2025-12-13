@@ -89,25 +89,32 @@ export default async function HomePage() {
     // adminSupabaseクライアントを使用してRLSをバイパス
     const adminSupabase = createAdminClient()
 
-    // ユーザーの所属施設を取得
+    // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
     console.log('[HomePage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
-      .select('facility_id, facilities(name)')
+      .select('facility_id, created_at, facilities(name)')
       .eq('user_id', user.id)
       .eq('deleted', false)
+      .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
     if (facilitiesError) {
       console.error('[HomePage] Error fetching user facilities with admin client:', facilitiesError)
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-    const facilityName = Array.isArray(firstFacility)
-      ? firstFacility[0]?.name
-      : (firstFacility as { name?: string } | null | undefined)?.name
+    // 最新の施設（最初に参加した施設）を表示
+    const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
+    const facilityName = Array.isArray(latestFacility)
+      ? latestFacility[0]?.name
+      : (latestFacility as { name?: string } | null | undefined)?.name
     console.log('[HomePage] User facility IDs:', facilityIds)
-    console.log('[HomePage] Facility name:', facilityName)
+    console.log('[HomePage] Latest facility name:', facilityName)
+    console.log('[HomePage] All facilities:', userFacilities?.map((uf) => ({
+      facility_id: uf.facility_id,
+      created_at: uf.created_at,
+      name: Array.isArray(uf.facilities) ? uf.facilities[0]?.name : (uf.facilities as { name?: string } | null | undefined)?.name
+    })))
 
     if (facilityIds.length === 0) {
       console.log('[HomePage] User has no facilities, redirecting to setup')
