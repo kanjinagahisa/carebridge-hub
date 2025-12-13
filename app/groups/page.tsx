@@ -100,9 +100,10 @@ export default async function GroupsPage() {
     console.log('[GroupsPage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
-      .select('facility_id, role, facilities(name)')
+      .select('facility_id, role, created_at, facilities(name)')
       .eq('user_id', user.id)
       .eq('deleted', false)
+      .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
     console.log('[GroupsPage] User facilities result:', {
       hasError: !!facilitiesError,
@@ -118,12 +119,13 @@ export default async function GroupsPage() {
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-    const facilityName = Array.isArray(firstFacility)
-      ? firstFacility[0]?.name
-      : (firstFacility as { name?: string } | null | undefined)?.name
+    // 最新の施設（最後に参加した施設）を表示
+    const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
+    const facilityName = Array.isArray(latestFacility)
+      ? latestFacility[0]?.name
+      : (latestFacility as { name?: string } | null | undefined)?.name
 
-    // ユーザーのロールを取得（admin かどうか）
+    // ユーザーのロールを取得（admin かどうか）- 最新の施設のロールを使用
     const userRole = userFacilities?.[0]?.role
     const isAdmin = userRole === ROLES.ADMIN
 
