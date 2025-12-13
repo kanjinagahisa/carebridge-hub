@@ -15,8 +15,18 @@ export const dynamic = 'force-dynamic'
  * Server Component として実装
  * 最新投稿のまとめを表示（グループ投稿と利用者投稿の両方）
  */
-export default async function HomePage() {
+export default async function HomePage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ facility_id?: string }> | { facility_id?: string }
+}) {
   console.log('[HomePage] Starting...')
+  // searchParamsがPromiseの場合は解決する（Next.js 15対応）
+  const resolvedSearchParams = searchParams instanceof Promise ? await searchParams : searchParams
+  const requestedFacilityId = resolvedSearchParams?.facility_id
+  if (requestedFacilityId) {
+    console.log('[HomePage] Facility ID from query parameter:', requestedFacilityId)
+  }
 
   try {
     const supabase = await createClient()
@@ -103,13 +113,40 @@ export default async function HomePage() {
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    // 最新の施設（最初に参加した施設）を表示
-    const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-    const facilityName = Array.isArray(latestFacility)
-      ? latestFacility[0]?.name
-      : (latestFacility as { name?: string } | null | undefined)?.name
+    
+    // クエリパラメータで指定された施設IDがあれば、それを優先的に表示
+    // 招待リンクから参加した場合など、特定の施設を表示したい場合に使用
+    let selectedFacility: { name?: string } | null = null
+    let facilityName: string | undefined = undefined
+    
+    if (requestedFacilityId) {
+      // リクエストされた施設IDがユーザーの所属施設に含まれているか確認
+      const requestedFacility = userFacilities?.find(
+        (uf) => uf.facility_id === requestedFacilityId
+      )
+      if (requestedFacility) {
+        const facilityData = requestedFacility.facilities as { name?: string } | { name?: string }[] | null | undefined
+        selectedFacility = Array.isArray(facilityData)
+          ? facilityData[0] || null
+          : (facilityData as { name?: string } | null | undefined) || null
+        facilityName = selectedFacility?.name
+        console.log('[HomePage] Using requested facility:', facilityName)
+      } else {
+        console.warn('[HomePage] Requested facility ID not found in user facilities:', requestedFacilityId)
+      }
+    }
+    
+    // クエリパラメータで指定がない場合、または指定された施設が見つからない場合、最新の施設を表示
+    if (!facilityName) {
+      const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
+      facilityName = Array.isArray(latestFacility)
+        ? latestFacility[0]?.name
+        : (latestFacility as { name?: string } | null | undefined)?.name
+      console.log('[HomePage] Using latest facility:', facilityName)
+    }
+    
     console.log('[HomePage] User facility IDs:', facilityIds)
-    console.log('[HomePage] Latest facility name:', facilityName)
+    console.log('[HomePage] Selected facility name:', facilityName)
     console.log('[HomePage] All facilities:', userFacilities?.map((uf) => ({
       facility_id: uf.facility_id,
       created_at: uf.created_at,

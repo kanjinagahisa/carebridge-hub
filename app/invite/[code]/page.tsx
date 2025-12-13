@@ -25,17 +25,18 @@ export default function InviteAcceptPage() {
   const [user, setUser] = useState<any>(null)
   const router = useRouter()
 
-  // 参加完了後、自動的にホームにリダイレクト
+  // 参加完了後、自動的にホームにリダイレクト（参加した施設IDをクエリパラメータで渡す）
   useEffect(() => {
-    if (isAccepted) {
+    if (isAccepted && inviteData) {
       const timer = setTimeout(() => {
         // 完全なページリロードを行い、サーバー側で最新のデータを取得する
-        window.location.href = '/home'
+        // 参加した施設IDをクエリパラメータで渡すことで、その施設を優先的に表示
+        window.location.href = `/home?facility_id=${inviteData.facility_id}`
       }, 1000) // 1秒待機してデータベースの更新を確実に反映させる
 
       return () => clearTimeout(timer)
     }
-  }, [isAccepted])
+  }, [isAccepted, inviteData])
 
   useEffect(() => {
     const checkInvite = async () => {
