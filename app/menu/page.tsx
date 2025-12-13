@@ -113,9 +113,10 @@ export default async function MenuPage() {
     }
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
-      .select('role, facility_id, facilities(name)')
+      .select('role, facility_id, created_at, facilities(name)')
       .eq('user_id', user.id)
       .eq('deleted', false)
+      .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
     if (facilitiesError) {
       console.error('[MenuPage] Error fetching user facilities:', facilitiesError)
@@ -128,19 +129,19 @@ export default async function MenuPage() {
     }
 
     const isAdmin = userFacilities?.some((uf) => uf.role === ROLES.ADMIN) || false
-    // 最初の施設IDを取得（招待リンクと施設設定リンクで使用）
-    const firstFacilityId = userFacilities && userFacilities.length > 0 
+    // 最新の施設IDを取得（招待リンクと施設設定リンクで使用）
+    const latestFacilityId = userFacilities && userFacilities.length > 0 
       ? userFacilities[0].facility_id 
       : null
-    // 施設名を取得
-    const firstFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-    const facilityName = Array.isArray(firstFacility)
-      ? firstFacility[0]?.name
-      : (firstFacility as { name?: string } | null | undefined)?.name
+    // 最新の施設名を取得
+    const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
+    const facilityName = Array.isArray(latestFacility)
+      ? latestFacility[0]?.name
+      : (latestFacility as { name?: string } | null | undefined)?.name
     console.log('[MenuPage] User facilities count:', userFacilities?.length || 0)
     console.log('[MenuPage] User roles:', userFacilities?.map((uf) => uf.role) || [])
     console.log('[MenuPage] User is admin:', isAdmin)
-    console.log('[MenuPage] First facility ID:', firstFacilityId)
+    console.log('[MenuPage] Latest facility ID:', latestFacilityId)
 
     return (
       <div className="min-h-screen bg-gray-100 pb-20">
@@ -178,10 +179,10 @@ export default async function MenuPage() {
 
           {/* メニュー項目 */}
           <div className="bg-white rounded-xl shadow-sm">
-            {isAdmin && firstFacilityId && (
+            {isAdmin && latestFacilityId && (
               <>
                 <Link
-                  href={`/settings/facility/invite?facility_id=${firstFacilityId}`}
+                  href={`/settings/facility/invite?facility_id=${latestFacilityId}`}
                   className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"
                 >
                   <UserPlus size={20} className="text-gray-600" />
