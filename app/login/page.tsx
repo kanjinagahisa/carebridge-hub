@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Logo from '@/components/Logo'
@@ -16,30 +16,160 @@ function LoginContent() {
   const [successMessage, setSuccessMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [hasClearedSession, setHasClearedSession] = useState(false)
+  // sessionStorage を使用してリダイレクト試行回数を保持（ページリロード後も保持）
+  const getInitialRedirectAttempt = () => {
+    if (typeof window !== 'undefined') {
+      const stored = sessionStorage.getItem('redirectAttempt')
+      return stored ? parseInt(stored, 10) : 0
+    }
+    return 0
+  }
+  const redirectAttemptRef = useRef(getInitialRedirectAttempt())
 
   // 認証確認後のコールバック処理（メール確認URLクリック後）
   useEffect(() => {
+    // セッションが既にクリアされている場合は、処理をスキップ
+    if (hasClearedSession) {
+      setIsCheckingAuth(false)
+      return
+    }
+    
+    let isMounted = true
+    let redirectTimer: NodeJS.Timeout | null = null
+    const supabase = createClient()
+    
     const handleAuthCallback = async () => {
-      const supabase = createClient()
+      // リダイレクト試行回数が1回を超えた場合、セッションをクリアしてログインフォームを表示
+      // ネットワークタブで307リダイレクトが確認できたため、最初からセッションをクリア
+      if (redirectAttemptRef.current >= 1) {
+        console.warn('[Login] Too many redirect attempts (307 detected), clearing session')
+        setHasClearedSession(true)
+        setIsCheckingAuth(false)
+        await supabase.auth.signOut()
+        if (typeof window !== 'undefined') {
+          sessionStorage.removeItem('redirectAttempt')
+        }
+        return
+      }
+      
+      // 最初からCookieの存在を確認（Application タブでCookieが空であることが確認できた）
+      const hasAuthCookies = typeof document !== 'undefined' && 
+        document.cookie.split(';').some(cookie => {
+          const trimmed = cookie.trim()
+          return trimmed.startsWith('sb-') || trimmed.includes('supabase-auth-token')
+        })
+      
+      if (!hasAuthCookies) {
+        console.warn('[Login] No auth cookies found, clearing session immediately')
+        setHasClearedSession(true)
+        setIsCheckingAuth(false)
+        await supabase.auth.signOut()
+        return
+      }
       
       // まず、既にセッションが確立されているか確認（ページリロード後など）
-      const { data: { session: existingSession } } = await supabase.auth.getSession()
+      const { data: { session: existingSession }, error: sessionError } = await supabase.auth.getSession()
+      
+      // セッションが存在する場合、ユーザー情報も確認する
       if (existingSession) {
-        console.log('[Login] Existing session found, redirecting to home')
-        // リダイレクトを確実に実行するため、即座に実行
-        try {
-          window.location.href = '/home'
-          // リダイレクトが実行されない場合に備えて、フォールバック処理
-          setTimeout(() => {
-            if (window.location.pathname !== '/home') {
-              console.warn('Redirect may have failed, trying window.location.replace...')
-              window.location.replace('/home')
-            }
-          }, 100)
-        } catch (err) {
-          console.error('Redirect error:', err)
-          window.location.replace('/home')
+        // ユーザー情報を取得してセッションが有効か確認
+        const { data: { user }, error: userError } = await supabase.auth.getUser()
+        
+        if (userError || !user) {
+          console.warn('[Login] Session exists but user is invalid, clearing session')
+          await supabase.auth.signOut()
+          setIsCheckingAuth(false)
+          setHasClearedSession(true)
+          return
         }
+        
+        // Cookieが存在するか確認（サーバー側で認証できるかどうかの指標）
+        const hasAuthCookies = typeof document !== 'undefined' && 
+          document.cookie.split(';').some(cookie => 
+            cookie.trim().startsWith('sb-') || cookie.trim().includes('supabase')
+          )
+        
+        if (!hasAuthCookies) {
+          console.warn('[Login] Session exists but no auth cookies found, clearing session')
+          await supabase.auth.signOut()
+          setIsCheckingAuth(false)
+          setHasClearedSession(true)
+          return
+        }
+        
+        console.log('[Login] Existing session found, checking user facilities')
+        // リダイレクト試行回数を増やす
+        redirectAttemptRef.current += 1
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('redirectAttempt', redirectAttemptRef.current.toString())
+        }
+        // リダイレクト中であることを示すため、isCheckingAuth を true に設定
+        setIsCheckingAuth(true)
+        
+        // ユーザーの施設所属状況を確認してから適切なページにリダイレクト
+        try {
+          const { data: roles, error: rolesError } = await supabase
+            .from('user_facility_roles')
+            .select('facility_id')
+            .eq('user_id', user.id)
+            .eq('deleted', false)
+          
+          let redirectPath = '/home'
+          if (rolesError) {
+            console.warn('[Login] Error checking facilities:', rolesError.message)
+            // エラーが発生した場合は、セットアップ画面にリダイレクト
+            redirectPath = '/setup/choose'
+          } else if (!roles || roles.length === 0) {
+            // 施設に所属していない場合、セットアップ画面にリダイレクト
+            console.log('[Login] User has no facilities, redirecting to /setup/choose')
+            redirectPath = '/setup/choose'
+          } else {
+            // 施設に所属している場合、ホームにリダイレクト
+            console.log('[Login] User has facilities, redirecting to /home')
+            redirectPath = redirectTo || '/home'
+          }
+          
+          // リダイレクトが失敗した場合（指定したパスから /login に戻ってきた場合）の処理
+          // より早く（200ms以内に）フォールバック処理を実行
+          redirectTimer = setTimeout(async () => {
+            if (isMounted && window.location.pathname === '/login' && !hasClearedSession) {
+              console.warn('[Login] Redirect failed (307 detected), clearing session immediately')
+              // セッションをクリアしてログインフォームを表示
+              setHasClearedSession(true)
+              await supabase.auth.signOut()
+              setIsCheckingAuth(false)
+              if (typeof window !== 'undefined') {
+                sessionStorage.removeItem('redirectAttempt')
+              }
+            }
+          }, 200)
+          
+          // リダイレクトを確実に実行するため、window.location.replace を使用
+          // replace を使用することで、ブラウザの履歴に残さずにリダイレクト
+          console.log('[Login] Redirecting to:', redirectPath)
+          window.location.replace(redirectPath)
+        } catch (err) {
+          console.error('[Login] Error in facility check:', err)
+          // エラーが発生した場合は、セットアップ画面にリダイレクト
+          window.location.replace('/setup/choose')
+        }
+        
+        return
+      }
+      
+      // セッションエラーがある場合、ログインフォームを表示
+      if (sessionError) {
+        console.warn('[Login] Session error:', sessionError.message)
+        setIsCheckingAuth(false)
+        setHasClearedSession(true)
+        return
+      }
+      
+      // セッションが存在しない場合、ログインフォームを表示
+      if (!existingSession) {
+        setIsCheckingAuth(false)
+        setHasClearedSession(true)
         return
       }
       
@@ -114,23 +244,12 @@ function LoginContent() {
           
           if (data.session) {
             console.log('[Login] Session established for signup confirmation')
+            // リダイレクト中であることを示すため、isCheckingAuth を true に設定
+            setIsCheckingAuth(true)
             // セッション確立後、即座にホーム画面にリダイレクト
-            // URLフラグメントを削除してクリーンなURLに
-            window.history.replaceState(null, '', '/login')
-            // リダイレクトを確実に実行
-            try {
+            // リダイレクトを確実に実行するため、window.location.href を使用
               window.location.href = '/home'
-              // リダイレクトが実行されない場合に備えて、フォールバック処理
-              setTimeout(() => {
-                if (window.location.pathname !== '/home') {
-                  console.warn('Redirect may have failed, trying window.location.replace...')
-                  window.location.replace('/home')
-                }
-              }, 100)
-            } catch (err) {
-              console.error('Redirect error:', err)
-              window.location.replace('/home')
-            }
+            // リダイレクトが実行されたので、ここで処理を終了
             return
           } else {
             setErrorMessage('セッションの確立に失敗しました。')
@@ -155,21 +274,11 @@ function LoginContent() {
           
           if (session) {
             console.log('[Login] Session already established from code')
-            // URLパラメータを削除してクリーンなURLに
-            window.history.replaceState(null, '', '/login')
-            // リダイレクトを確実に実行
-            try {
+            // リダイレクト中であることを示すため、isCheckingAuth を true に設定
+            setIsCheckingAuth(true)
+            // リダイレクトを確実に実行するため、window.location.href を使用
               window.location.href = '/home'
-              setTimeout(() => {
-                if (window.location.pathname !== '/home') {
-                  console.warn('Redirect may have failed, trying window.location.replace...')
-                  window.location.replace('/home')
-                }
-              }, 100)
-            } catch (err) {
-              console.error('Redirect error:', err)
-              window.location.replace('/home')
-            }
+            // リダイレクトが実行されたので、ここで処理を終了
             return
           } else {
             // セッションが確立されていない場合、少し待ってから再確認
@@ -177,21 +286,11 @@ function LoginContent() {
             const { data: { session: retrySession } } = await supabase.auth.getSession()
             
             if (retrySession) {
-              // URLパラメータを削除してクリーンなURLに
-              window.history.replaceState(null, '', '/login')
-              // リダイレクトを確実に実行
-              try {
+              // リダイレクト中であることを示すため、isCheckingAuth を true に設定
+              setIsCheckingAuth(true)
+              // リダイレクトを確実に実行するため、window.location.href を使用
                 window.location.href = '/home'
-                setTimeout(() => {
-                  if (window.location.pathname !== '/home') {
-                    console.warn('Redirect may have failed, trying window.location.replace...')
-                    window.location.replace('/home')
-                  }
-                }, 100)
-              } catch (err) {
-                console.error('Redirect error:', err)
-                window.location.replace('/home')
-              }
+              // リダイレクトが実行されたので、ここで処理を終了
               return
             } else {
               console.warn('[Login] No session found for code parameter')
@@ -224,21 +323,11 @@ function LoginContent() {
           
           if (data.session) {
             console.log('[Login] Session established for signup confirmation')
-            // URLパラメータを削除してクリーンなURLに
-            window.history.replaceState(null, '', '/login')
-            // リダイレクトを確実に実行
-            try {
+            // リダイレクト中であることを示すため、isCheckingAuth を true に設定
+            setIsCheckingAuth(true)
+            // リダイレクトを確実に実行するため、window.location.href を使用
               window.location.href = '/home'
-              setTimeout(() => {
-                if (window.location.pathname !== '/home') {
-                  console.warn('Redirect may have failed, trying window.location.replace...')
-                  window.location.replace('/home')
-                }
-              }, 100)
-            } catch (err) {
-              console.error('Redirect error:', err)
-              window.location.replace('/home')
-            }
+            // リダイレクトが実行されたので、ここで処理を終了
             return
           } else {
             setErrorMessage('セッションの確立に失敗しました。')
@@ -254,6 +343,7 @@ function LoginContent() {
       
       // 認証確認のコールバックがない場合、通常のログイン画面を表示
       setIsCheckingAuth(false)
+      setHasClearedSession(true)
     }
     
     handleAuthCallback()
@@ -266,6 +356,10 @@ function LoginContent() {
     window.addEventListener('hashchange', handleHashChange)
     
     return () => {
+      isMounted = false
+      if (redirectTimer) {
+        clearTimeout(redirectTimer)
+      }
       window.removeEventListener('hashchange', handleHashChange)
     }
   }, [searchParams])
@@ -313,8 +407,12 @@ function LoginContent() {
       // error がなく data.session が存在する場合のみ /home へリダイレクトする
       if (data?.session) {
         console.log('Login successful, session exists:', data.session)
+        
+        // リダイレクト中であることを示すため、isCheckingAuth を true に設定
+        setIsCheckingAuth(true)
+        
         // クッキーが確実に設定されるまで待機
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        await new Promise((resolve) => setTimeout(resolve, 300))
         
         // セッションを再確認
         const { data: { session: currentSession } } = await supabase.auth.getSession()
@@ -322,47 +420,24 @@ function LoginContent() {
         
         if (currentSession) {
           console.log('Session confirmed, redirecting to:', redirectTo)
-          // セッションが確立されるまで少し待機してからリダイレクト
-          await new Promise((resolve) => setTimeout(resolve, 200))
+          // リダイレクトを確実に実行するため、window.location.href を使用
           // 完全なページリロードを行い、サーバー側のミドルウェアがセッションを認識できるようにする
-          // window.location.replace を使用して、ブラウザの履歴に残さない
-          // リダイレクトを確実に実行するため、try-catchで囲む
-          try {
-            window.location.replace(redirectTo)
-            // リダイレクトが実行されない場合に備えて、フォールバック処理
-            setTimeout(() => {
-              if (window.location.pathname !== redirectTo) {
-                console.warn('Redirect may have failed, trying again...')
                 window.location.href = redirectTo
-              }
-            }, 1000)
-          } catch (err) {
-            console.error('Redirect error:', err)
-            window.location.href = redirectTo
-          }
+          // リダイレクトが実行されたので、ここで処理を終了
+          return
         } else {
           console.warn('No session found after wait, but proceeding with redirect anyway')
           // セッションが取得できなくても、signInWithPasswordのレスポンスにセッションがあるので
           // リダイレクトを試みる（クッキーは既に設定されている可能性が高い）
-          // セッションが確立されるまで少し待機
-          await new Promise((resolve) => setTimeout(resolve, 200))
-          try {
-            window.location.replace(redirectTo)
-            setTimeout(() => {
-              if (window.location.pathname !== redirectTo) {
-                console.warn('Redirect may have failed, trying again...')
                 window.location.href = redirectTo
-              }
-            }, 1000)
-          } catch (err) {
-            console.error('Redirect error:', err)
-            window.location.href = redirectTo
-          }
+          // リダイレクトが実行されたので、ここで処理を終了
+          return
         }
       } else {
         console.error('No session in response')
         setErrorMessage('ログインに失敗しました。セッションが確立されませんでした。')
         setLoading(false)
+        setIsCheckingAuth(false)
       }
     } catch (err) {
       console.error('Login exception:', err)
