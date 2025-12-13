@@ -98,6 +98,7 @@ export default function SetupCreatePage() {
         headers: {
           'Content-Type': 'application/json',
         },
+        credentials: 'include', // クッキーを確実に送信
         body: JSON.stringify({
           name: facilityName.trim(),
         }),

@@ -6,9 +6,10 @@ export async function POST(request: NextRequest) {
   try {
     // デバッグ: Cookieを確認
     const cookies = request.cookies.getAll()
-    console.log('[API] Cookies found:', cookies.length)
-    const authCookies = cookies.filter(c => c.name.includes('sb-') || c.name.includes('auth-token'))
-    console.log('[API] Auth cookies:', authCookies.map(c => ({ name: c.name, valuePreview: c.value.substring(0, 30) + '...' })))
+    console.log('[API] All cookies found:', cookies.length)
+    console.log('[API] Cookie names:', cookies.map(c => c.name))
+    const authCookies = cookies.filter(c => c.name.includes('sb-') || c.name.includes('auth-token') || c.name.includes('supabase'))
+    console.log('[API] Auth cookies:', authCookies.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length || 0 })))
 
     // API Route用のクライアントでユーザー認証を確認
     // NextRequestからCookieを読み取る
@@ -17,8 +18,19 @@ export async function POST(request: NextRequest) {
     // Cookieからセッション情報を抽出して設定を試みる（ミドルウェアと同じ処理）
     let userFromCookie: any = null
     if (authCookies.length > 0) {
-      const authTokenCookie = authCookies.find(c => c.name.includes('auth-token'))
+      // まず auth-token を含むクッキーを探す
+      let authTokenCookie = authCookies.find(c => c.name.includes('auth-token'))
+      // 見つからない場合は、sb- で始まるクッキーを探す（Supabase SSRの標準形式）
+      if (!authTokenCookie) {
+        authTokenCookie = authCookies.find(c => c.name.startsWith('sb-') && c.name.includes('auth-token'))
+      }
+      // それでも見つからない場合は、sb- で始まる最初のクッキーを使用
+      if (!authTokenCookie && authCookies.length > 0) {
+        authTokenCookie = authCookies.find(c => c.name.startsWith('sb-'))
+      }
+      
       if (authTokenCookie && authTokenCookie.value) {
+        console.log('[API] Found auth cookie:', authTokenCookie.name)
         try {
           // Cookieの値をURLデコード
           let cookieValue = authTokenCookie.value
@@ -42,14 +54,30 @@ export async function POST(request: NextRequest) {
                 console.log('[API] Session set from cookie successfully, user:', setSessionData.user.email)
                 userFromCookie = setSessionData.user
               }
+            } else {
+              console.log('[API] Cookie value does not contain access_token and refresh_token')
             }
+          } else {
+            console.log('[API] Cookie value does not start with {, first 50 chars:', cookieValue.substring(0, 50))
           }
         } catch (err) {
           console.error('[API] Error processing cookie value:', err)
+          if (err instanceof Error) {
+            console.error('[API] Error details:', err.message)
+          }
         }
+      } else {
+        console.log('[API] No valid auth cookie found')
       }
+    } else {
+      console.log('[API] No auth cookies found')
     }
     
+    // Cookieから取得したユーザー情報を優先
+    if (userFromCookie) {
+      console.log('[API] Using user from cookie:', userFromCookie.email)
+    }
+
     // セッションを確認
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     console.log('[API] Session check:', { hasSession: !!session, sessionError: sessionError?.message })
@@ -60,22 +88,25 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     // Cookieから取得したユーザー情報を使用（getUser()で取得できない場合）
-    const finalUser = user || userFromCookie
+    const finalUser = userFromCookie || user
 
-    console.log('[API] User check:', { hasUser: !!finalUser, userId: finalUser?.id, getUserError: getUserError?.message })
-
-    if (getUserError && !userFromCookie) {
-      console.error('[API] Authentication failed:', { getUserError, user: finalUser ? 'exists' : 'null' })
-      return NextResponse.json(
-        { error: '認証が必要です', details: getUserError?.message || 'User not found' },
-        { status: 401 }
-      )
-    }
+    console.log('[API] User check:', { 
+      hasUser: !!finalUser, 
+      userId: finalUser?.id, 
+      email: finalUser?.email,
+      fromCookie: !!userFromCookie,
+      fromGetUser: !!user,
+      getUserError: getUserError?.message 
+    })
 
     if (!finalUser) {
-      console.error('[API] No user found')
+      console.error('[API] No user found', { 
+        getUserError: getUserError?.message,
+        sessionError: sessionError?.message,
+        cookieUserExists: !!userFromCookie 
+      })
       return NextResponse.json(
-        { error: '認証が必要です', details: 'User not found' },
+        { error: '認証が必要です', details: 'Auth session missing!' },
         { status: 401 }
       )
     }
