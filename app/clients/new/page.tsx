@@ -43,12 +43,13 @@ export default function NewClientPage() {
         return
       }
 
-      // ユーザーの所属施設を取得
+      // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
       const { data: userFacilities, error: facilitiesError } = await supabase
         .from('user_facility_roles')
-        .select('facility_id, facilities(name)')
+        .select('facility_id, created_at, facilities(name)')
         .eq('user_id', user.id)
         .eq('deleted', false)
+        .order('created_at', { ascending: false }) // 最新の施設を最初に取得
         .limit(1)
 
       if (facilitiesError) {
@@ -107,12 +108,21 @@ export default function NewClientPage() {
         memo: formData.memo.trim() || null,
       }
 
+      console.log('[NewClientPage] Creating client with payload:', payload)
       const newClient = await createClientAPI(payload)
+      console.log('[NewClientPage] Client created successfully:', newClient)
       
       // 作成成功時、利用者一覧に戻る
       router.push('/clients')
     } catch (err: any) {
-      console.error('Failed to create client:', err)
+      console.error('[NewClientPage] Failed to create client:', err)
+      console.error('[NewClientPage] Error details:', {
+        message: err?.message,
+        code: err?.code,
+        details: err?.details,
+        hint: err?.hint,
+        error: err,
+      })
       setError(
         err?.message || '利用者の作成に失敗しました。もう一度お試しください。'
       )
@@ -291,4 +301,5 @@ export default function NewClientPage() {
     </div>
   )
 }
+
 
