@@ -112,12 +112,11 @@ export default async function HomePage({
       console.error('[HomePage] Error fetching user facilities with admin client:', facilitiesError)
     }
 
-    const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    
     // クエリパラメータで指定された施設IDがあれば、それを優先的に表示
     // 招待リンクから参加した場合など、特定の施設を表示したい場合に使用
     let selectedFacility: { name?: string } | null = null
     let facilityName: string | undefined = undefined
+    let selectedFacilityId: string | undefined = undefined
     
     if (requestedFacilityId) {
       // リクエストされた施設IDがユーザーの所属施設に含まれているか確認
@@ -130,6 +129,7 @@ export default async function HomePage({
           ? facilityData[0] || null
           : (facilityData as { name?: string } | null | undefined) || null
         facilityName = selectedFacility?.name
+        selectedFacilityId = requestedFacilityId
         console.log('[HomePage] Using requested facility:', facilityName)
       } else {
         console.warn('[HomePage] Requested facility ID not found in user facilities:', requestedFacilityId)
@@ -137,15 +137,17 @@ export default async function HomePage({
     }
     
     // クエリパラメータで指定がない場合、または指定された施設が見つからない場合、最新の施設を表示
-    if (!facilityName) {
+    if (!facilityName || !selectedFacilityId) {
       const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
       facilityName = Array.isArray(latestFacility)
         ? latestFacility[0]?.name
         : (latestFacility as { name?: string } | null | undefined)?.name
-      console.log('[HomePage] Using latest facility:', facilityName)
+      // 最新の施設IDを取得（表示されている施設名に対応する施設）
+      selectedFacilityId = userFacilities?.[0]?.facility_id
+      console.log('[HomePage] Using latest facility:', facilityName, 'ID:', selectedFacilityId)
     }
     
-    console.log('[HomePage] User facility IDs:', facilityIds)
+    console.log('[HomePage] Selected facility ID:', selectedFacilityId)
     console.log('[HomePage] Selected facility name:', facilityName)
     console.log('[HomePage] All facilities:', userFacilities?.map((uf) => ({
       facility_id: uf.facility_id,
@@ -153,17 +155,17 @@ export default async function HomePage({
       name: Array.isArray(uf.facilities) ? uf.facilities[0]?.name : (uf.facilities as { name?: string } | null | undefined)?.name
     })))
 
-    if (facilityIds.length === 0) {
+    if (!selectedFacilityId) {
       console.log('[HomePage] User has no facilities, redirecting to setup')
       redirect('/setup/choose')
     }
 
-    // 自施設の全グループを取得
-    console.log('[HomePage] Fetching groups for facilities:', facilityIds)
+    // 自施設の全グループを取得（最新の施設のグループのみ）
+    console.log('[HomePage] Fetching groups for latest facility:', selectedFacilityId)
     const { data: groups, error: groupsError } = await adminSupabase
       .from('groups')
       .select('id')
-      .in('facility_id', facilityIds)
+      .eq('facility_id', selectedFacilityId)
       .eq('deleted', false)
 
     if (groupsError) {
@@ -171,12 +173,12 @@ export default async function HomePage({
     }
     const groupIds = groups?.map((g) => g.id) || []
 
-    // 自施設の全クライアントを取得
-    console.log('[HomePage] Fetching clients for facilities:', facilityIds)
+    // 自施設の全クライアントを取得（最新の施設のクライアントのみ）
+    console.log('[HomePage] Fetching clients for latest facility:', selectedFacilityId)
     const { data: clients, error: clientsError } = await adminSupabase
       .from('clients')
       .select('id, name')
-      .in('facility_id', facilityIds)
+      .eq('facility_id', selectedFacilityId)
       .eq('deleted', false)
 
     if (clientsError) {
