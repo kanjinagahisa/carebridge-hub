@@ -126,15 +126,17 @@ export default async function ClientsPage() {
       console.error('[ClientsPage] Error fetching user facilities:', facilitiesError)
     }
 
-    const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
     // 最新の施設（最後に参加した施設）を表示
     const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
     const facilityName = Array.isArray(latestFacility)
       ? latestFacility[0]?.name
       : (latestFacility as { name?: string } | null | undefined)?.name
+    
+    // 最新の施設IDのみを取得（表示されている施設名に対応する施設）
+    const latestFacilityId = userFacilities?.[0]?.facility_id
 
     console.log('[ClientsPage] Facility info:', {
-      facilityIdsCount: facilityIds.length,
+      latestFacilityId,
       facilityName,
       allFacilities: userFacilities?.map((uf) => ({
         facility_id: uf.facility_id,
@@ -143,17 +145,17 @@ export default async function ClientsPage() {
       }))
     })
 
-    // 利用者を取得
+    // 利用者を取得（最新の施設の利用者のみ）
     let clients: Client[] = []
     let clientsError: any = null
 
-    if (facilityIds.length > 0) {
-      console.log('[ClientsPage] Fetching clients for facilities:', facilityIds)
+    if (latestFacilityId) {
+      console.log('[ClientsPage] Fetching clients for latest facility:', latestFacilityId)
       // adminSupabaseを使用してRLSをバイパス
       const { data, error } = await adminSupabase
         .from('clients')
         .select('*')
-        .in('facility_id', facilityIds)
+        .eq('facility_id', latestFacilityId)
         .eq('deleted', false)
         .order('name', { ascending: true })
 
@@ -164,12 +166,12 @@ export default async function ClientsPage() {
         clients = (data as Client[]) || []
         console.log('[ClientsPage] Fetched clients:', {
           count: clients.length,
-          facilityIds: facilityIds.length,
+          facilityId: latestFacilityId,
           facilityName,
         })
       }
     } else {
-      console.log('[ClientsPage] No facility IDs found, skipping clients fetch')
+      console.log('[ClientsPage] No latest facility ID found, skipping clients fetch')
     }
 
     // 利用者ごとの最新投稿と未読数を取得
