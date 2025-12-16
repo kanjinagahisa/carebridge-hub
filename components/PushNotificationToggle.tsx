@@ -51,10 +51,12 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
           await navigator.serviceWorker.register('/sw.js')
         }
         // 購読状態を確認
-        checkSubscriptionStatus()
-      } catch (error) {
+        await checkSubscriptionStatus()
+      } catch (error: any) {
         console.error('[PushNotificationToggle] Error registering service worker:', error)
-        setIsSupported(false)
+        // Service Workerの登録に失敗しても、コンポーネントは表示する
+        // ユーザーにはエラーメッセージを表示
+        setMessage({ type: 'error', text: 'Service Workerの登録に失敗しました。ページをリロードしてください。' })
       }
     }
 
@@ -66,6 +68,7 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
       const registration = await navigator.serviceWorker.ready
       const subscription = await registration.pushManager.getSubscription()
       setIsSubscribed(!!subscription)
+      console.log('[PushNotificationToggle] Subscription status checked:', !!subscription)
     } catch (error) {
       console.error('[PushNotificationToggle] Error checking subscription:', error)
       setIsSubscribed(false)
