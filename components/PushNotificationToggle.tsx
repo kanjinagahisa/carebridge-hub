@@ -12,17 +12,33 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [isSupported, setIsSupported] = useState(false)
+  const [isMounted, setIsMounted] = useState(false)
+
+  // クライアントサイドでのみマウント状態を管理
+  useEffect(() => {
+    setIsMounted(true)
+    console.log('[PushNotificationToggle] Component mounted')
+  }, [])
 
   // ブラウザのサポート確認と初期状態の取得
   useEffect(() => {
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined') {
+      console.log('[PushNotificationToggle] window is undefined (SSR)')
+      return
+    }
+
+    console.log('[PushNotificationToggle] Checking browser support...')
+    console.log('[PushNotificationToggle] serviceWorker in navigator:', 'serviceWorker' in navigator)
+    console.log('[PushNotificationToggle] PushManager in window:', 'PushManager' in window)
 
     // Service WorkerとPush APIのサポート確認
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.log('[PushNotificationToggle] Browser does not support Web Push')
       setIsSupported(false)
       return
     }
 
+    console.log('[PushNotificationToggle] Browser supports Web Push')
     setIsSupported(true)
 
     // Service Workerの登録（既存の登録があれば再利用）
@@ -180,12 +196,25 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
     return window.btoa(binary)
   }
 
-  // サポートされていない場合
+  // サーバーサイドレンダリング時は何も表示しない
+  if (!isMounted) {
+    return (
+      <div className={`bg-white rounded-xl shadow-sm p-4 ${className || ''}`}>
+        <p className="text-sm text-gray-600">読み込み中...</p>
+      </div>
+    )
+  }
+
+  // サポートされていない場合（デバッグ用：常に表示）
   if (!isSupported) {
     return (
       <div className={`bg-white rounded-xl shadow-sm p-4 ${className || ''}`}>
+        <h3 className="font-semibold text-gray-900 mb-2">プッシュ通知</h3>
         <p className="text-sm text-gray-600">
           このブラウザではWeb Push通知に対応していません。
+        </p>
+        <p className="text-xs text-gray-500 mt-2">
+          デバッグ: Service Worker={typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? '✓' : '✗'}, PushManager={typeof window !== 'undefined' && 'PushManager' in window ? '✓' : '✗'}
         </p>
       </div>
     )
