@@ -91,7 +91,7 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
         // 5. 新しい購読を作成
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey) as BufferSource,
         })
       }
 
