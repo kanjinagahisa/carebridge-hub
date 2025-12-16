@@ -39,6 +39,10 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 # メール送信設定（Resend）
 RESEND_API_KEY=your_resend_api_key
 RESEND_FROM_EMAIL=CareBridge Hub <noreply@yourdomain.com>
+
+# Web Push通知設定（VAPID）
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=your_vapid_public_key
+VAPID_PRIVATE_KEY=your_vapid_private_key
 ```
 
 **メール送信設定について:**
@@ -52,12 +56,19 @@ RESEND_FROM_EMAIL=CareBridge Hub <noreply@yourdomain.com>
 - 詳細は `SUPABASE_SMTP_SETUP_GUIDE.md` を参照してください
 - この設定により、1日30通の制限を緩和できます（Resend無料プラン: 月間3,000通）
 
+**Web Push通知設定について:**
+- Web Push通知にはVAPIDキーが必要です
+- `npm install -g web-push` で web-push をインストール後、`web-push generate-vapid-keys` コマンドでキーペアを生成してください
+- 生成した公開鍵を `NEXT_PUBLIC_VAPID_PUBLIC_KEY`、秘密鍵を `VAPID_PRIVATE_KEY` に設定してください
+- Vercelにも同じ環境変数を設定してください
+
 ### 4. データベーススキーマの適用
 
 SupabaseのSQL Editorで、以下の順序でマイグレーションファイルを実行してください：
 
 1. `supabase/migrations/001_initial_schema.sql`
 2. `supabase/migrations/002_rls_policies.sql`
+3. `supabase/migrations/066_push_subscriptions.sql`（Web Push通知を使用する場合）
 
 ### 5. 開発サーバーの起動
 

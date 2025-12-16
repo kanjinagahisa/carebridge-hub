@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { LogOut, User, FileText, Shield, UserPlus, Settings } from 'lucide-react'
+import { LogOut, User, FileText, Shield, UserPlus, Settings, Bell } from 'lucide-react'
 import { PROFESSION_LABELS, ROLES } from '@/lib/constants'
 import LogoutButton from '@/components/LogoutButton'
 
@@ -197,6 +197,13 @@ export default async function MenuPage() {
                 </Link>
               </>
             )}
+            <Link
+              href="/settings/notifications"
+              className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"
+            >
+              <Bell size={20} className="text-gray-600" />
+              <span className="text-gray-900">通知設定</span>
+            </Link>
             <Link
               href="/terms"
               className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"

@@ -6,6 +6,7 @@ import { Bell, Bookmark, Eye } from 'lucide-react'
 import type { Post } from '@/types/carebridge'
 import NewPostSummaryCard from '@/components/home/NewPostSummaryCard'
 import Header from '@/components/Header'
+import PushNotificationToggle from '@/components/PushNotificationToggle'
 
 // 認証が必要なページのため、動的レンダリングを強制
 export const dynamic = 'force-dynamic'
@@ -286,6 +287,9 @@ export default async function HomePage({
               現在、お知らせはありません。
             </p>
           </div>
+
+          {/* プッシュ通知設定 */}
+          <PushNotificationToggle />
 
           {/* 未読・しおりボタン */}
           <div className="flex gap-3">
