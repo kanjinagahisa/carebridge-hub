@@ -16,8 +16,9 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
 
   // クライアントサイドでのみマウント状態を管理
   useEffect(() => {
+    console.log('[PushNotificationToggle] useEffect called')
     setIsMounted(true)
-    console.log('[PushNotificationToggle] Component mounted')
+    console.log('[PushNotificationToggle] Component mounted, isMounted set to true')
   }, [])
 
   // ブラウザのサポート確認と初期状態の取得
@@ -199,14 +200,18 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
     return window.btoa(binary)
   }
 
-  // サーバーサイドレンダリング時は何も表示しない
-  if (!isMounted) {
-    return (
-      <div className={`bg-white rounded-xl shadow-sm p-4 ${className || ''}`}>
-        <p className="text-sm text-gray-600">読み込み中...</p>
-      </div>
-    )
-  }
+  // デバッグ用：常にコンポーネントを表示
+  console.log('[PushNotificationToggle] Render:', { isMounted, isSupported, className })
+  
+  // サーバーサイドレンダリング時も表示（デバッグ用）
+  // if (!isMounted) {
+  //   return (
+  //     <div className={`bg-white rounded-xl shadow-sm p-4 ${className || ''}`}>
+  //       <h3 className="font-semibold text-gray-900 mb-2">プッシュ通知</h3>
+  //       <p className="text-sm text-gray-600">読み込み中...</p>
+  //     </div>
+  //   )
+  // }
 
   // サポートされていない場合（デバッグ用：常に表示）
   if (!isSupported) {
