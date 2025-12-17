@@ -7,8 +7,26 @@ import { NextRequest, NextResponse } from 'next/server'
  * DELETE: 購読情報を削除
  */
 
+export const runtime = 'nodejs'
+
 export async function POST(request: NextRequest) {
   try {
+    // リクエスト開始ログ
+    console.log('[push/subscribe][POST] start', {
+      origin: request.headers.get('origin') || 'none',
+      referer: request.headers.get('referer') || 'none',
+      userAgent: request.headers.get('user-agent')?.substring(0, 50) || 'none',
+    })
+
+    // Cookie ヘッダーの確認
+    const cookieHeader = request.headers.get('cookie')
+    const cookiePresent = !!cookieHeader
+    const cookieLength = cookieHeader?.length || 0
+    console.log('[push/subscribe][POST] cookie check', {
+      present: cookiePresent,
+      length: cookieLength,
+    })
+
     // 認証チェック
     const supabase = await createClient()
     const {
@@ -16,7 +34,25 @@ export async function POST(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    // 認証結果ログ
+    console.log('[push/subscribe][POST] auth result', {
+      hasError: !!authError,
+      errorStatus: authError?.status || null,
+      errorMessageLength: authError?.message?.length || null,
+      hasUser: !!user,
+      userId: user?.id || null,
+    })
+
+    if (authError) {
+      console.error('[push/subscribe][POST] 401 reason=authError', {
+        status: authError.status,
+        messageLength: authError.message?.length || null,
+      })
+      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
+    }
+
+    if (!user) {
+      console.error('[push/subscribe][POST] 401 reason=noUser')
       return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
     }
 
@@ -48,7 +84,12 @@ export async function POST(request: NextRequest) {
       )
 
     if (insertError) {
-      console.error('[POST /api/push/subscribe] Error upserting subscription:', insertError)
+      console.error('[POST /api/push/subscribe] Error upserting subscription:', {
+        code: insertError.code,
+        message: insertError.message,
+        details: insertError.details,
+        hint: insertError.hint,
+      })
       return NextResponse.json(
         { message: '購読情報の保存に失敗しました', error: insertError.message },
         { status: 500 }
@@ -57,7 +98,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ message: '購読情報を保存しました' }, { status: 200 })
   } catch (error: any) {
-    console.error('[POST /api/push/subscribe] Unexpected error:', error)
+    console.error('[POST /api/push/subscribe] Unexpected error:', {
+      name: error?.name || 'Unknown',
+      message: error?.message || 'Unknown error',
+      stack: error?.stack ? 'present' : 'none',
+    })
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました', error: error.message },
       { status: 500 }
@@ -67,6 +112,22 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    // リクエスト開始ログ
+    console.log('[push/subscribe][DELETE] start', {
+      origin: request.headers.get('origin') || 'none',
+      referer: request.headers.get('referer') || 'none',
+      userAgent: request.headers.get('user-agent')?.substring(0, 50) || 'none',
+    })
+
+    // Cookie ヘッダーの確認
+    const cookieHeader = request.headers.get('cookie')
+    const cookiePresent = !!cookieHeader
+    const cookieLength = cookieHeader?.length || 0
+    console.log('[push/subscribe][DELETE] cookie check', {
+      present: cookiePresent,
+      length: cookieLength,
+    })
+
     // 認証チェック
     const supabase = await createClient()
     const {
@@ -74,7 +135,25 @@ export async function DELETE(request: NextRequest) {
       error: authError,
     } = await supabase.auth.getUser()
 
-    if (authError || !user) {
+    // 認証結果ログ
+    console.log('[push/subscribe][DELETE] auth result', {
+      hasError: !!authError,
+      errorStatus: authError?.status || null,
+      errorMessageLength: authError?.message?.length || null,
+      hasUser: !!user,
+      userId: user?.id || null,
+    })
+
+    if (authError) {
+      console.error('[push/subscribe][DELETE] 401 reason=authError', {
+        status: authError.status,
+        messageLength: authError.message?.length || null,
+      })
+      return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
+    }
+
+    if (!user) {
+      console.error('[push/subscribe][DELETE] 401 reason=noUser')
       return NextResponse.json({ message: '認証が必要です' }, { status: 401 })
     }
 
@@ -94,7 +173,12 @@ export async function DELETE(request: NextRequest) {
       .eq('endpoint', endpoint)
 
     if (deleteError) {
-      console.error('[DELETE /api/push/subscribe] Error deleting subscription:', deleteError)
+      console.error('[DELETE /api/push/subscribe] Error deleting subscription:', {
+        code: deleteError.code,
+        message: deleteError.message,
+        details: deleteError.details,
+        hint: deleteError.hint,
+      })
       return NextResponse.json(
         { message: '購読情報の削除に失敗しました', error: deleteError.message },
         { status: 500 }
@@ -103,7 +187,11 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ message: '購読情報を削除しました' }, { status: 200 })
   } catch (error: any) {
-    console.error('[DELETE /api/push/subscribe] Unexpected error:', error)
+    console.error('[DELETE /api/push/subscribe] Unexpected error:', {
+      name: error?.name || 'Unknown',
+      message: error?.message || 'Unknown error',
+      stack: error?.stack ? 'present' : 'none',
+    })
     return NextResponse.json(
       { message: 'サーバーエラーが発生しました', error: error.message },
       { status: 500 }
