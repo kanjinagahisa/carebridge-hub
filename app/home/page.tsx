@@ -289,7 +289,13 @@ export default async function HomePage({
           </div>
 
           {/* プッシュ通知設定 */}
+          <div className="bg-yellow-100 border-2 border-yellow-500 p-2 mb-2">
+            <p className="text-xs text-yellow-800">デバッグ: PushNotificationToggle の前に到達</p>
+          </div>
           <PushNotificationToggle />
+          <div className="bg-yellow-100 border-2 border-yellow-500 p-2 mt-2">
+            <p className="text-xs text-yellow-800">デバッグ: PushNotificationToggle の後に到達</p>
+          </div>
 
           {/* 未読・しおりボタン */}
           <div className="flex gap-3">
