@@ -5,6 +5,11 @@ import { Send } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { notifyNewPost } from '@/lib/utils/notifications'
 
+// 投稿サイドの型と定数
+const POST_SIDES = ['staff', 'care'] as const
+type PostSide = (typeof POST_SIDES)[number]
+const DEFAULT_POST_SIDE: PostSide = 'staff'
+
 interface ClientPostComposerProps {
   clientId: string
   currentUserId: string
@@ -34,6 +39,7 @@ export default function ClientPostComposer({
         .insert({
           client_id: clientId,
           author_id: currentUserId,
+          side: DEFAULT_POST_SIDE,
           body: content.trim(),
         })
         .select()
