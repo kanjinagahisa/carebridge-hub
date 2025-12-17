@@ -201,17 +201,18 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
   }
 
   // デバッグ用：常にコンポーネントを表示
-  console.log('[PushNotificationToggle] Render:', { isMounted, isSupported, className })
+  console.log('[PushNotificationToggle] Render called:', { isMounted, isSupported, className })
   
   // サーバーサイドレンダリング時も表示（デバッグ用）
-  // if (!isMounted) {
-  //   return (
-  //     <div className={`bg-white rounded-xl shadow-sm p-4 ${className || ''}`}>
-  //       <h3 className="font-semibold text-gray-900 mb-2">プッシュ通知</h3>
-  //       <p className="text-sm text-gray-600">読み込み中...</p>
-  //     </div>
-  //   )
-  // }
+  if (!isMounted) {
+    console.log('[PushNotificationToggle] Not mounted yet, showing loading state')
+    return (
+      <div className={`bg-white rounded-xl shadow-sm p-4 border-2 border-red-500 ${className || ''}`}>
+        <h3 className="font-semibold text-gray-900 mb-2">プッシュ通知（読み込み中）</h3>
+        <p className="text-sm text-gray-600">コンポーネントは読み込まれています...</p>
+      </div>
+    )
+  }
 
   // サポートされていない場合（デバッグ用：常に表示）
   if (!isSupported) {
