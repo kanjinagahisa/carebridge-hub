@@ -1,4 +1,4 @@
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -14,7 +14,7 @@ export const runtime = 'nodejs'
  * Route Handler専用の Supabase Client を作成
  * next/headers の cookies() を使用して Cookie ベースのセッションを取得
  */
-function createRouteHandlerClient() {
+async function createRouteHandlerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -30,14 +30,14 @@ function createRouteHandlerClient() {
     )
   }
 
-  const cookieStore = cookies()
+  const cookieStore = await cookies()
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
         return cookieStore.getAll()
       },
-      setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
+      setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
         try {
           cookiesToSet.forEach(({ name, value, options }) => {
             if (value === '' || options?.maxAge === 0) {
@@ -51,7 +51,7 @@ function createRouteHandlerClient() {
           // これは middleware でセッションをリフレッシュしている場合は問題ない
         }
       },
-    },
+    } as any,
   })
 }
 
@@ -223,7 +223,7 @@ export async function DELETE(request: NextRequest) {
     })
 
     // 認証チェック（Route Handler専用クライアントを使用）
-    const supabase = createRouteHandlerClient()
+    const supabase = await createRouteHandlerClient()
     const {
       data: { user },
       error: authError,
