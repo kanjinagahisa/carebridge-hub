@@ -171,6 +171,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 購読情報を保存（upsert: endpointがuniqueなので同一端末の再購読に対応）
+    // 注意: updated_at はトリガーで自動更新されるため、明示的に送信しない
     const { error: insertError } = await supabase
       .from('push_subscriptions')
       .upsert(
@@ -179,7 +180,8 @@ export async function POST(request: NextRequest) {
           endpoint,
           p256dh: keys.p256dh,
           auth: keys.auth,
-          updated_at: new Date().toISOString(),
+          // updated_at は削除: PostgRESTのスキーマキャッシュで認識されない場合があるため
+          // テーブルに updated_at カラムがあっても、トリガーで自動更新されるので不要
         },
         {
           onConflict: 'endpoint',
@@ -187,7 +189,7 @@ export async function POST(request: NextRequest) {
       )
 
     if (insertError) {
-      console.error('[POST /api/push/subscribe] Error upserting subscription:', {
+      console.error('[DB_ERROR]', {
         code: insertError.code,
         message: insertError.message,
         details: insertError.details,
@@ -195,21 +197,22 @@ export async function POST(request: NextRequest) {
       })
       return jsonResponse(
         response,
-        { message: '購読情報の保存に失敗しました', error: insertError.message },
+        { ok: false, error: insertError.message },
         500
       )
     }
 
-    return jsonResponse(response, { message: '購読情報を保存しました' }, 200)
+    console.log('[DB_UPSERT]', { ok: true })
+    return jsonResponse(response, { ok: true }, 200)
   } catch (error: any) {
-    console.error('[POST /api/push/subscribe] Unexpected error:', {
-      name: error?.name || 'Unknown',
+    console.error('[DB_ERROR]', {
+      code: 'UNEXPECTED',
       message: error?.message || 'Unknown error',
-      stack: error?.stack ? 'present' : 'none',
+      details: error?.name || 'Unknown',
     })
     return jsonResponse(
       response,
-      { message: 'サーバーエラーが発生しました', error: error.message },
+      { ok: false, error: error?.message || 'サーバーエラーが発生しました' },
       500
     )
   }
@@ -304,7 +307,7 @@ export async function DELETE(request: NextRequest) {
       .eq('endpoint', endpoint)
 
     if (deleteError) {
-      console.error('[DELETE /api/push/subscribe] Error deleting subscription:', {
+      console.error('[DB_ERROR]', {
         code: deleteError.code,
         message: deleteError.message,
         details: deleteError.details,
@@ -312,21 +315,22 @@ export async function DELETE(request: NextRequest) {
       })
       return jsonResponse(
         response,
-        { message: '購読情報の削除に失敗しました', error: deleteError.message },
+        { ok: false, error: deleteError.message },
         500
       )
     }
 
-    return jsonResponse(response, { message: '購読情報を削除しました' }, 200)
+    console.log('[DB_DELETE]', { ok: true })
+    return jsonResponse(response, { ok: true }, 200)
   } catch (error: any) {
-    console.error('[DELETE /api/push/subscribe] Unexpected error:', {
-      name: error?.name || 'Unknown',
+    console.error('[DB_ERROR]', {
+      code: 'UNEXPECTED',
       message: error?.message || 'Unknown error',
-      stack: error?.stack ? 'present' : 'none',
+      details: error?.name || 'Unknown',
     })
     return jsonResponse(
       response,
-      { message: 'サーバーエラーが発生しました', error: error.message },
+      { ok: false, error: error?.message || 'サーバーエラーが発生しました' },
       500
     )
   }
