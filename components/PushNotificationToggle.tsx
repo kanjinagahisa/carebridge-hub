@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { urlBase64ToUint8Array } from '@/lib/webpush/vapid'
+import { createClient } from '@/lib/supabase/client'
 
 interface PushNotificationToggleProps {
   className?: string
@@ -116,10 +117,15 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
       }
 
       // 6. サーバーに購読情報を送信
+      const supabase = createClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      
       const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           endpoint: subscription.endpoint,
@@ -168,10 +174,15 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
       await subscription.unsubscribe()
 
       // 3. サーバー側から購読情報を削除
+      const supabase = createClient()
+      const { data: sessionData } = await supabase.auth.getSession()
+      const token = sessionData?.session?.access_token
+      
       const response = await fetch('/api/push/subscribe', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ endpoint }),
       })
