@@ -172,6 +172,13 @@ export async function POST(request: NextRequest) {
 
     // 購読情報を保存（upsert: endpointがuniqueなので同一端末の再購読に対応）
     // 注意: updated_at はトリガーで自動更新されるため、明示的に送信しない
+    console.log('[PUSH_UPSERT_PAYLOAD]', {
+      user_id: user.id,
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      facility_id,
+    })
     const { error: insertError } = await supabase
       .from('push_subscriptions')
       .upsert(
