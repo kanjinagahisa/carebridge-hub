@@ -197,7 +197,12 @@ export async function POST(request: NextRequest) {
       })
       return jsonResponse(
         response,
-        { ok: false, error: insertError.message },
+        { 
+          ok: false, 
+          reason: 'dbError',
+          code: insertError.code,
+          message: insertError.message,
+        },
         500
       )
     }
@@ -212,7 +217,12 @@ export async function POST(request: NextRequest) {
     })
     return jsonResponse(
       response,
-      { ok: false, error: error?.message || 'サーバーエラーが発生しました' },
+      { 
+        ok: false, 
+        reason: 'unexpectedError',
+        code: 'UNEXPECTED',
+        message: error?.message || 'サーバーエラーが発生しました',
+      },
       500
     )
   }
@@ -315,7 +325,12 @@ export async function DELETE(request: NextRequest) {
       })
       return jsonResponse(
         response,
-        { ok: false, error: deleteError.message },
+        { 
+          ok: false, 
+          reason: 'dbError',
+          code: deleteError.code,
+          message: deleteError.message,
+        },
         500
       )
     }
@@ -330,7 +345,12 @@ export async function DELETE(request: NextRequest) {
     })
     return jsonResponse(
       response,
-      { ok: false, error: error?.message || 'サーバーエラーが発生しました' },
+      { 
+        ok: false, 
+        reason: 'unexpectedError',
+        code: 'UNEXPECTED',
+        message: error?.message || 'サーバーエラーが発生しました',
+      },
       500
     )
   }
