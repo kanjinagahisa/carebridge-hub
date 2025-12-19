@@ -114,39 +114,26 @@ export async function POST(request: NextRequest) {
       length: cookieLength,
     })
 
-    // 認証チェック（Route Handler専用クライアントを使用）
+    // 認証チェック（Route Handler専用クライアントを使用、Cookie認証のみ）
     const supabase = await createRouteHandlerClient()
     
-    // Bearerトークンの確認
-    const authHeader = request.headers.get('authorization') ?? ''
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    
-    let user: any = null
-    let userError: any = null
-    
-    if (token) {
-      // Bearerトークンで認証を試行
-      const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-      user = userData?.user ?? null
-      userError = userErr ?? null
-      console.log('[AUTH_MODE] bearer')
-    } else {
-      // Cookie経由で認証を試行
-      const { data: userData, error: userErr } = await supabase.auth.getUser()
-      user = userData?.user ?? null
-      userError = userErr ?? null
-      console.log('[AUTH_MODE] cookie')
-    }
+    // Cookie経由で認証を試行
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    // 認証チェックログ
+    // デバッグログ：認証状態の確認
+    console.log('[AUTH_COOKIE_USER]', user?.id)
+    const { data: { session } } = await supabase.auth.getSession()
+    console.log('[AUTH_COOKIE_SESSION_USER]', session?.user?.id)
     console.log('[AUTH_CHECK]', { user: user ?? null })
     
     // 認証エラーログ
-    console.log('[AUTH_ERROR]', {
-      message: userError?.message ?? null,
-      status: (userError as any)?.status ?? null,
-      name: (userError as any)?.name ?? null,
-    })
+    if (userError) {
+      console.error('[AUTH_ERROR]', {
+        message: userError.message,
+        status: (userError as any)?.status ?? null,
+        name: (userError as any)?.name ?? null,
+      })
+    }
 
     if (userError) {
       console.error('[push/subscribe][POST] 401 reason=authError')
@@ -264,39 +251,26 @@ export async function DELETE(request: NextRequest) {
       length: cookieLength,
     })
 
-    // 認証チェック（Route Handler専用クライアントを使用）
+    // 認証チェック（Route Handler専用クライアントを使用、Cookie認証のみ）
     const supabase = await createRouteHandlerClient()
     
-    // Bearerトークンの確認
-    const authHeader = request.headers.get('authorization') ?? ''
-    const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : ''
-    
-    let user: any = null
-    let userError: any = null
-    
-    if (token) {
-      // Bearerトークンで認証を試行
-      const { data: userData, error: userErr } = await supabase.auth.getUser(token)
-      user = userData?.user ?? null
-      userError = userErr ?? null
-      console.log('[AUTH_MODE] bearer')
-    } else {
-      // Cookie経由で認証を試行
-      const { data: userData, error: userErr } = await supabase.auth.getUser()
-      user = userData?.user ?? null
-      userError = userErr ?? null
-      console.log('[AUTH_MODE] cookie')
-    }
+    // Cookie経由で認証を試行
+    const { data: { user }, error: userError } = await supabase.auth.getUser()
 
-    // 認証チェックログ
+    // デバッグログ：認証状態の確認
+    console.log('[AUTH_COOKIE_USER]', user?.id)
+    const { data: { session } } = await supabase.auth.getSession()
+    console.log('[AUTH_COOKIE_SESSION_USER]', session?.user?.id)
     console.log('[AUTH_CHECK]', { user: user ?? null })
     
     // 認証エラーログ
-    console.log('[AUTH_ERROR]', {
-      message: userError?.message ?? null,
-      status: (userError as any)?.status ?? null,
-      name: (userError as any)?.name ?? null,
-    })
+    if (userError) {
+      console.error('[AUTH_ERROR]', {
+        message: userError.message,
+        status: (userError as any)?.status ?? null,
+        name: (userError as any)?.name ?? null,
+      })
+    }
 
     if (userError) {
       console.error('[push/subscribe][DELETE] 401 reason=authError')

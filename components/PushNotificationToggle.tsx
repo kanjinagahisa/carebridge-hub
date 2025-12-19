@@ -116,17 +116,13 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
         })
       }
 
-      // 6. サーバーに購読情報を送信
-      const supabase = createClient()
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token
-      
+      // 6. サーバーに購読情報を送信（Cookie認証を使用）
       const response = await fetch('/api/push/subscribe', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: 'include', // Cookieを確実に送信
         body: JSON.stringify({
           endpoint: subscription.endpoint,
           keys: {
@@ -173,17 +169,13 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
       // 2. ブラウザ側で購読を解除
       await subscription.unsubscribe()
 
-      // 3. サーバー側から購読情報を削除
-      const supabase = createClient()
-      const { data: sessionData } = await supabase.auth.getSession()
-      const token = sessionData?.session?.access_token
-      
+      // 3. サーバー側から購読情報を削除（Cookie認証を使用）
       const response = await fetch('/api/push/subscribe', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        credentials: 'include', // Cookieを確実に送信
         body: JSON.stringify({ endpoint }),
       })
 
