@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
     })
 
     // 認証チェック（Route Handler専用クライアントを使用）
-    const supabase = createRouteHandlerClient()
+    const supabase = await createRouteHandlerClient()
     const {
       data: { user },
       error: authError,
