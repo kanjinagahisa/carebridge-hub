@@ -31,6 +31,18 @@ async function createRouteHandlerClient() {
   }
 
   const cookieStore = await cookies()
+  const all = cookieStore.getAll().map(c => c.name)
+
+  console.log('[COOKIE_KEYS]', {
+    hasSbAuth: all.some(n => n.includes('sb-') && n.includes('auth-token')),
+    sbKeys: all.filter(n => n.includes('sb-')).slice(0, 20),
+  })
+
+  console.log('[SUPABASE_URL_HOST]', {
+    host: process.env.NEXT_PUBLIC_SUPABASE_URL
+      ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host
+      : null,
+  })
 
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
