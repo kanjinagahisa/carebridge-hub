@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
       endpoint,
       p256dh: keys.p256dh,
       auth: keys.auth,
-      facility_id,
+      facility_id: undefined,
     })
     const { error: insertError } = await supabase
       .from('push_subscriptions')
