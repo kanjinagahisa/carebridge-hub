@@ -1,4 +1,5 @@
-import { createServerClient } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
@@ -11,12 +12,9 @@ export const runtime = 'nodejs'
 
 /**
  * Route Handler専用の Supabase Client を作成
- * request の cookie を読み取り、response に cookie を反映する
+ * next/headers の cookies() を使用して Cookie ベースのセッションを取得
  */
-function createRouteHandlerClient(
-  request: NextRequest,
-  response: NextResponse
-) {
+function createRouteHandlerClient() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -32,22 +30,28 @@ function createRouteHandlerClient(
     )
   }
 
+  const cookieStore = cookies()
+
   return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
       getAll() {
-        return request.cookies.getAll()
+        return cookieStore.getAll()
       },
-      setAll(cookies: { name: string; value: string; options?: any }[]) {
-        // cookie を直接 response に反映
-        cookies.forEach(({ name, value, options }) => {
-          if (value === '' || options?.maxAge === 0) {
-            response.cookies.delete(name)
-          } else {
-            response.cookies.set(name, value, options)
-          }
-        })
+      setAll(cookiesToSet: { name: string; value: string; options?: CookieOptions }[]) {
+        try {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            if (value === '' || options?.maxAge === 0) {
+              cookieStore.delete(name)
+            } else {
+              cookieStore.set(name, value, options)
+            }
+          })
+        } catch (error) {
+          // Route Handler から呼ばれた場合、Cookie の set/remove ができない場合がある
+          // これは middleware でセッションをリフレッシュしている場合は問題ない
+        }
       },
-    } as any,
+    },
   })
 }
 
@@ -74,6 +78,14 @@ export async function POST(request: NextRequest) {
   const response = new NextResponse()
 
   try {
+    // 環境変数チェックログ
+    console.log('[ENV_CHECK]', {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasServiceRole:
+        !!process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        !!process.env.SUPABASE_SECRET_KEY,
+    })
+
     // リクエスト開始ログ
     console.log('[push/subscribe][POST] start', {
       origin: request.headers.get('origin') || 'none',
@@ -91,11 +103,16 @@ export async function POST(request: NextRequest) {
     })
 
     // 認証チェック（Route Handler専用クライアントを使用）
-    const supabase = createRouteHandlerClient(request, response)
+    const supabase = createRouteHandlerClient()
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
+
+    // 認証チェックログ
+    console.log('[AUTH_CHECK]', {
+      user,
+    })
 
     // 認証結果ログ
     console.log('[push/subscribe][POST] auth result', {
@@ -181,6 +198,14 @@ export async function DELETE(request: NextRequest) {
   const response = new NextResponse()
 
   try {
+    // 環境変数チェックログ
+    console.log('[ENV_CHECK]', {
+      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      hasServiceRole:
+        !!process.env.SUPABASE_SERVICE_ROLE_KEY ||
+        !!process.env.SUPABASE_SECRET_KEY,
+    })
+
     // リクエスト開始ログ
     console.log('[push/subscribe][DELETE] start', {
       origin: request.headers.get('origin') || 'none',
@@ -198,11 +223,16 @@ export async function DELETE(request: NextRequest) {
     })
 
     // 認証チェック（Route Handler専用クライアントを使用）
-    const supabase = createRouteHandlerClient(request, response)
+    const supabase = createRouteHandlerClient()
     const {
       data: { user },
       error: authError,
     } = await supabase.auth.getUser()
+
+    // 認証チェックログ
+    console.log('[AUTH_CHECK]', {
+      user,
+    })
 
     // 認証結果ログ
     console.log('[push/subscribe][DELETE] auth result', {
