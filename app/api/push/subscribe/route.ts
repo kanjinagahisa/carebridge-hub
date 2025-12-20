@@ -1,4 +1,4 @@
-import { createServerClient } from '@supabase/ssr'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -9,63 +9,6 @@ import { NextRequest, NextResponse } from 'next/server'
  */
 
 export const runtime = 'nodejs'
-
-/**
- * Route Handler専用の Supabase Client を作成
- * next/headers の cookies() を使用して Cookie ベースのセッションを取得
- */
-async function createRouteHandlerClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl) {
-    throw new Error(
-      'NEXT_PUBLIC_SUPABASE_URL が設定されていません。環境変数を確認してください。'
-    )
-  }
-
-  if (!supabaseAnonKey) {
-    throw new Error(
-      'NEXT_PUBLIC_SUPABASE_ANON_KEY が設定されていません。環境変数を確認してください。'
-    )
-  }
-
-  const cookieStore = await cookies()
-  const all = cookieStore.getAll().map(c => c.name)
-
-  console.log('[COOKIE_KEYS]', {
-    hasSbAuth: all.some(n => n.includes('sb-') && n.includes('auth-token')),
-    sbKeys: all.filter(n => n.includes('sb-')).slice(0, 20),
-  })
-
-  console.log('[SUPABASE_URL_HOST]', {
-    host: process.env.NEXT_PUBLIC_SUPABASE_URL
-      ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).host
-      : null,
-  })
-
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      getAll() {
-        return cookieStore.getAll()
-      },
-      setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            if (value === '' || options?.maxAge === 0) {
-              cookieStore.delete(name)
-            } else {
-              cookieStore.set(name, value, options)
-            }
-          })
-        } catch (error) {
-          // Route Handler から呼ばれた場合、Cookie の set/remove ができない場合がある
-          // これは middleware でセッションをリフレッシュしている場合は問題ない
-        }
-      },
-    } as any,
-  })
-}
 
 /**
  * JSON レスポンスを返す helper
@@ -114,35 +57,18 @@ export async function POST(request: NextRequest) {
       length: cookieLength,
     })
 
-    // 認証チェック（Route Handler専用クライアントを使用、Cookie認証のみ）
-    const supabase = await createRouteHandlerClient()
+    // 認証チェック（auth-helpers 正規ルート、Cookie認証のみ）
+    const supabase = createRouteHandlerClient({ cookies })
     
-    // Cookie経由で認証を試行
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-    // デバッグログ：認証状態の確認
-    console.log('[AUTH_COOKIE_USER]', user?.id)
-    const { data: { session } } = await supabase.auth.getSession()
-    console.log('[AUTH_COOKIE_SESSION_USER]', session?.user?.id)
-    console.log('[AUTH_CHECK]', { user: user ?? null })
-    
-    // 認証エラーログ
-    if (userError) {
-      console.error('[AUTH_ERROR]', {
-        message: userError.message,
-        status: (userError as any)?.status ?? null,
-        name: (userError as any)?.name ?? null,
-      })
-    }
-
-    if (userError) {
-      console.error('[push/subscribe][POST] 401 reason=authError')
-      return jsonResponse(response, { message: '認証が必要です' }, 401)
-    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) {
-      console.error('[push/subscribe][POST] 401 reason=noUser')
-      return jsonResponse(response, { message: '認証が必要です' }, 401)
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
     }
 
     // リクエストボディを取得
@@ -251,35 +177,18 @@ export async function DELETE(request: NextRequest) {
       length: cookieLength,
     })
 
-    // 認証チェック（Route Handler専用クライアントを使用、Cookie認証のみ）
-    const supabase = await createRouteHandlerClient()
+    // 認証チェック（auth-helpers 正規ルート、Cookie認証のみ）
+    const supabase = createRouteHandlerClient({ cookies })
     
-    // Cookie経由で認証を試行
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
-
-    // デバッグログ：認証状態の確認
-    console.log('[AUTH_COOKIE_USER]', user?.id)
-    const { data: { session } } = await supabase.auth.getSession()
-    console.log('[AUTH_COOKIE_SESSION_USER]', session?.user?.id)
-    console.log('[AUTH_CHECK]', { user: user ?? null })
-    
-    // 認証エラーログ
-    if (userError) {
-      console.error('[AUTH_ERROR]', {
-        message: userError.message,
-        status: (userError as any)?.status ?? null,
-        name: (userError as any)?.name ?? null,
-      })
-    }
-
-    if (userError) {
-      console.error('[push/subscribe][DELETE] 401 reason=authError')
-      return jsonResponse(response, { message: '認証が必要です' }, 401)
-    }
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
 
     if (!user) {
-      console.error('[push/subscribe][DELETE] 401 reason=noUser')
-      return jsonResponse(response, { message: '認証が必要です' }, 401)
+      return NextResponse.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      )
     }
 
     // リクエストボディを取得
