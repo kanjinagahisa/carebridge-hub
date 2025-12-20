@@ -1,5 +1,4 @@
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
-import { cookies } from 'next/headers'
+import { createServerClient } from '@supabase/ssr'
 import { NextRequest, NextResponse } from 'next/server'
 
 /**
@@ -10,36 +9,20 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export const runtime = 'nodejs'
 
-/**
- * JSON レスポンスを返す helper
- * cookie は既に response に反映されているので、そのまま返す
- */
-function jsonResponse(
-  response: NextResponse,
-  body: any,
-  status: number = 200
-): NextResponse {
-  // response に既に設定された cookie を保持したまま JSON レスポンスを作成
-  const jsonResponse = NextResponse.json(body, { status })
-  // cookie をコピー
-  response.cookies.getAll().forEach((cookie) => {
-    jsonResponse.cookies.set(cookie.name, cookie.value, cookie)
-  })
-  return jsonResponse
-}
-
 export async function POST(request: NextRequest) {
-  // response を最初に作成（cookie 反映用）
-  const response = new NextResponse()
+  const response = NextResponse.next()
 
   try {
-    // 環境変数チェックログ
-    console.log('[ENV_CHECK]', {
-      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasServiceRole:
-        !!process.env.SUPABASE_SERVICE_ROLE_KEY ||
-        !!process.env.SUPABASE_SECRET_KEY,
-    })
+    // 環境変数チェック
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
 
     // リクエスト開始ログ
     console.log('[push/subscribe][POST] start', {
@@ -57,9 +40,21 @@ export async function POST(request: NextRequest) {
       length: cookieLength,
     })
 
-    // 認証チェック（auth-helpers 正規ルート、Cookie認証のみ）
-    const supabase = createRouteHandlerClient({ cookies })
-    
+    // Supabase クライアント作成（Cookie認証のみ）
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
+        },
+      } as any,
+    })
+
+    // 認証チェック（Cookie認証のみ）
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -67,7 +62,7 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
-        { status: 401 }
+        { status: 401, headers: response.headers }
       )
     }
 
@@ -76,10 +71,9 @@ export async function POST(request: NextRequest) {
     const { endpoint, keys } = body
 
     if (!endpoint || !keys || !keys.p256dh || !keys.auth) {
-      return jsonResponse(
-        response,
+      return NextResponse.json(
         { message: 'endpoint, keys.p256dh, keys.auth は必須です' },
-        400
+        { status: 400, headers: response.headers }
       )
     }
 
@@ -115,51 +109,54 @@ export async function POST(request: NextRequest) {
         details: insertError.details,
         hint: insertError.hint,
       })
-      return jsonResponse(
-        response,
+      return NextResponse.json(
         { 
           ok: false, 
           reason: 'dbError',
           code: insertError.code,
           message: insertError.message,
         },
-        500
+        { status: 500, headers: response.headers }
       )
     }
 
     console.log('[DB_UPSERT]', { ok: true })
-    return jsonResponse(response, { ok: true }, 200)
+    return NextResponse.json(
+      { ok: true },
+      { status: 200, headers: response.headers }
+    )
   } catch (error: any) {
     console.error('[DB_ERROR]', {
       code: 'UNEXPECTED',
       message: error?.message || 'Unknown error',
       details: error?.name || 'Unknown',
     })
-    return jsonResponse(
-      response,
+    return NextResponse.json(
       { 
         ok: false, 
         reason: 'unexpectedError',
         code: 'UNEXPECTED',
         message: error?.message || 'サーバーエラーが発生しました',
       },
-      500
+      { status: 500, headers: response.headers }
     )
   }
 }
 
 export async function DELETE(request: NextRequest) {
-  // response を最初に作成（cookie 反映用）
-  const response = new NextResponse()
+  const response = NextResponse.next()
 
   try {
-    // 環境変数チェックログ
-    console.log('[ENV_CHECK]', {
-      hasUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-      hasServiceRole:
-        !!process.env.SUPABASE_SERVICE_ROLE_KEY ||
-        !!process.env.SUPABASE_SECRET_KEY,
-    })
+    // 環境変数チェック
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return NextResponse.json(
+        { error: 'Server configuration error' },
+        { status: 500 }
+      )
+    }
 
     // リクエスト開始ログ
     console.log('[push/subscribe][DELETE] start', {
@@ -177,9 +174,21 @@ export async function DELETE(request: NextRequest) {
       length: cookieLength,
     })
 
-    // 認証チェック（auth-helpers 正規ルート、Cookie認証のみ）
-    const supabase = createRouteHandlerClient({ cookies })
-    
+    // Supabase クライアント作成（Cookie認証のみ）
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll()
+        },
+        setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options)
+          })
+        },
+      } as any,
+    })
+
+    // 認証チェック（Cookie認証のみ）
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -187,7 +196,7 @@ export async function DELETE(request: NextRequest) {
     if (!user) {
       return NextResponse.json(
         { error: 'Unauthorized' },
-        { status: 401 }
+        { status: 401, headers: response.headers }
       )
     }
 
@@ -196,7 +205,10 @@ export async function DELETE(request: NextRequest) {
     const { endpoint } = body
 
     if (!endpoint) {
-      return jsonResponse(response, { message: 'endpoint は必須です' }, 400)
+      return NextResponse.json(
+        { message: 'endpoint は必須です' },
+        { status: 400, headers: response.headers }
+      )
     }
 
     // 購読情報を削除（user_idも条件に入れて、本人のもののみ削除可能にする）
@@ -213,35 +225,36 @@ export async function DELETE(request: NextRequest) {
         details: deleteError.details,
         hint: deleteError.hint,
       })
-      return jsonResponse(
-        response,
+      return NextResponse.json(
         { 
           ok: false, 
           reason: 'dbError',
           code: deleteError.code,
           message: deleteError.message,
         },
-        500
+        { status: 500, headers: response.headers }
       )
     }
 
     console.log('[DB_DELETE]', { ok: true })
-    return jsonResponse(response, { ok: true }, 200)
+    return NextResponse.json(
+      { ok: true },
+      { status: 200, headers: response.headers }
+    )
   } catch (error: any) {
     console.error('[DB_ERROR]', {
       code: 'UNEXPECTED',
       message: error?.message || 'Unknown error',
       details: error?.name || 'Unknown',
     })
-    return jsonResponse(
-      response,
+    return NextResponse.json(
       { 
         ok: false, 
         reason: 'unexpectedError',
         code: 'UNEXPECTED',
         message: error?.message || 'サーバーエラーが発生しました',
       },
-      500
+      { status: 500, headers: response.headers }
     )
   }
 }
