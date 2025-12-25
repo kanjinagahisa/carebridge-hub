@@ -5,15 +5,48 @@
 import webpush from 'web-push'
 import { createAdminClient } from '@/lib/supabase/admin'
 
-// VAPIDキーを環境変数から取得
-// サーバー側でも NEXT_PUBLIC_VAPID_PUBLIC_KEY を使用（クライアント側と統一）
-const vapidPublicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY
-const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
-const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com'
+/**
+ * VAPID_SUBJECTを整形する
+ * - emailだけの場合は `mailto:` を付ける
+ * - 既に `mailto:` や `https://` で始まる場合はそのまま使用
+ */
+function normalizeVapidSubject(subject: string | undefined): string {
+  if (!subject) {
+    return 'mailto:admin@example.com'
+  }
 
-// VAPIDキーが設定されている場合のみ初期化
-if (vapidPublicKey && vapidPrivateKey) {
-  webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
+  // 既に mailto: や https:// で始まる場合はそのまま返す
+  if (subject.startsWith('mailto:') || subject.startsWith('https://')) {
+    return subject
+  }
+
+  // email形式かどうかを簡易チェック（@が含まれているか）
+  if (subject.includes('@')) {
+    return `mailto:${subject}`
+  }
+
+  // それ以外の場合は mailto: を付ける
+  return `mailto:${subject}`
+}
+
+/**
+ * VAPIDキーを環境変数から取得（リクエスト時に取得）
+ */
+function getVapidKeys(): {
+  publicKey: string | undefined
+  privateKey: string | undefined
+  subject: string
+} {
+  const publicKey =
+    process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY
+  const privateKey = process.env.VAPID_PRIVATE_KEY
+  const subject = normalizeVapidSubject(process.env.VAPID_SUBJECT)
+
+  return {
+    publicKey,
+    privateKey,
+    subject,
+  }
 }
 
 interface PushNotificationPayload {
@@ -46,9 +79,24 @@ export async function sendPushNotificationsToFacility(
     deleted: 0,
   }
 
+  // VAPIDキーを取得（リクエスト時に取得）
+  const { publicKey, privateKey, subject } = getVapidKeys()
+
   // VAPIDキーが設定されていない場合はスキップ
-  if (!vapidPublicKey || !vapidPrivateKey) {
+  if (!publicKey || !privateKey) {
     console.warn('[push] VAPID keys not configured, skipping push notifications')
+    return result
+  }
+
+  // VAPIDキーを初期化（リクエスト時に実行、try/catchで包む）
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey)
+  } catch (error: any) {
+    console.error('[push] Failed to set VAPID details:', error)
+    console.error('[push] VAPID subject:', subject)
+    console.error('[push] VAPID public key exists:', !!publicKey)
+    console.error('[push] VAPID private key exists:', !!privateKey)
+    // エラーが発生しても処理を続行（通知送信はスキップ）
     return result
   }
 

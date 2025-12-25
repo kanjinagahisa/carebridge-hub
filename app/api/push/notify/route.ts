@@ -83,6 +83,29 @@ export async function POST(request: NextRequest) {
       url: `/clients/${clientId}/timeline`,
     }
 
+    // VAPIDキーの確認（必須envチェック）
+    const vapidPublicKey =
+      process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY
+    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
+
+    if (!vapidPublicKey || !vapidPrivateKey) {
+      console.warn(
+        '[push/notify][POST] VAPID keys not configured, skipping push notifications'
+      )
+      return NextResponse.json(
+        {
+          ok: false,
+          error: 'Push notifications are not configured. VAPID keys are missing.',
+          result: {
+            success: 0,
+            failed: 0,
+            deleted: 0,
+          },
+        },
+        { status: 500 }
+      )
+    }
+
     // 通知を送信
     console.log('[push/notify][POST] Sending notifications to facility:', client.facility_id)
     const result = await sendPushNotificationsToFacility(
