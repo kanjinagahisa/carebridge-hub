@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { Send } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { notifyNewPost } from '@/lib/utils/notifications'
 
 // 投稿サイドの型と定数
 const POST_SIDES = ['staff', 'care'] as const
@@ -51,29 +50,31 @@ export default function ClientPostComposer({
         return
       }
 
-      // 通知を送信（モック）
+      // Web Push通知を送信
       if (post) {
-        const { data: clientData } = await supabase
-          .from('clients')
-          .select('name, facility_id')
-          .eq('id', clientId)
-          .single()
+        try {
+          const response = await fetch('/api/push/notify', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              postId: post.id,
+              clientId: clientId,
+            }),
+          })
 
-        if (clientData) {
-          const { data: authorData } = await supabase
-            .from('users')
-            .select('display_name')
-            .eq('id', currentUserId)
-            .single()
-
-          await notifyNewPost(
-            post.id,
-            clientData.facility_id,
-            authorData?.display_name || '不明なユーザー',
-            content.trim(),
-            'client',
-            clientData.name
-          )
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            console.error('[ClientPostComposer] Failed to send push notification:', errorData)
+            // 通知送信の失敗は投稿作成を阻害しない（ログのみ）
+          } else {
+            const result = await response.json()
+            console.log('[ClientPostComposer] Push notification sent:', result)
+          }
+        } catch (error) {
+          console.error('[ClientPostComposer] Error sending push notification:', error)
+          // 通知送信の失敗は投稿作成を阻害しない（ログのみ）
         }
       }
 
