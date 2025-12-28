@@ -20,3 +20,4 @@ CREATE POLICY "Anonymous users can view facilities with valid invite codes"
 
 
 
+

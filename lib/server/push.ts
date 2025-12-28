@@ -103,11 +103,12 @@ export async function sendPushNotificationsToFacility(
   const adminSupabase = createAdminClient()
 
   try {
-    // 同じfacilityの購読者を取得（投稿者本人は除外）
+    // 同じfacilityの購読者を取得（投稿者本人は除外、deleted=falseのみ）
     const { data: subscriptions, error: fetchError } = await adminSupabase
       .from('push_subscriptions')
       .select('id, user_id, endpoint, p256dh, auth, deleted')
       .eq('facility_id', facilityId)
+      .eq('deleted', false)
       .neq('user_id', authorId)
 
     if (fetchError) {

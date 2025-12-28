@@ -12,3 +12,4 @@ ALTER TABLE push_subscriptions
 CREATE INDEX IF NOT EXISTS idx_push_subscriptions_facility_id 
 ON push_subscriptions(facility_id);
 
+

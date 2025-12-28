@@ -31,3 +31,4 @@ CREATE POLICY "Anonymous users can view invite codes by code"
 
 
 
+

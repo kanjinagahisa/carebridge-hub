@@ -17,3 +17,4 @@ ON push_subscriptions(endpoint);
 -- 注意: endpointカラムには既にUNIQUE制約があるが、UNIQUE INDEXも追加することで
 -- PostgRESTのupsert onConflictが確実に動作するようになる
 
+

@@ -405,3 +405,4 @@ WHERE ufr.user_id = 'NORMAL_USER_ID_HERE'::uuid
 
 
 
+
