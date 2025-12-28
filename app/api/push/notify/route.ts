@@ -13,6 +13,15 @@ export async function POST(request: NextRequest) {
   try {
     console.log('[push/notify][POST] start')
 
+    // Cookie名一覧を取得（デバッグ用）
+    const { cookies } = await import('next/headers')
+    const cookieStore = await cookies()
+    const cookieNames = cookieStore.getAll().map((c) => c.name)
+    console.info('[push/notify] auth-check', {
+      cookieNames,
+      cookieCount: cookieNames.length,
+    })
+
     // 認証チェック
     const supabase = await createClient()
     const {
@@ -20,10 +29,35 @@ export async function POST(request: NextRequest) {
       error: userError,
     } = await supabase.auth.getUser()
 
+    // 401直前：認証結果の詳細ログ
     if (userError || !user) {
+      const errorMessage = userError?.message || 'no error object'
+      const errorCode = userError?.status || userError?.code || 'no code'
+      const hasUser = !!user
+      const userId = user?.id ?? null
+
+      if (userError) {
+        console.info('[push/notify] UNAUTH_USER_ERROR', {
+          errorMessage: errorMessage.substring(0, 100),
+          errorCode,
+          hasUser,
+          userId,
+        })
+      } else {
+        console.info('[push/notify] UNAUTH_NO_USER', {
+          hasUser,
+          userId,
+        })
+      }
+
       console.log('[push/notify][POST] Unauthorized')
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
+
+    // 認証成功時のログ
+    console.info('[push/notify] auth-success', {
+      userId: user.id,
+    })
 
     // リクエストボディを取得
     const body = await request.json()
