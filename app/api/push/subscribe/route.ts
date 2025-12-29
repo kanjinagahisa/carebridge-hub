@@ -9,6 +9,8 @@ type SubscribeBody = {
   auth: string
   user_agent?: string | null
   device_type?: 'mobile' | 'desktop' | 'unknown' | string
+  facilityId?: string
+  facility_id?: string
 }
 
 async function getCurrentFacilityId(supabase: any, userId: string) {
@@ -49,16 +51,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'invalid_json' }, { status: 400 })
   }
 
-  // ログ: 受信したbodyの構造を確認（秘匿情報は先頭20文字のみ）
+  // ログ: 受信したbodyの構造を確認（秘匿情報は出力しない）
   console.info('[push/subscribe] body-received', {
     userId,
     hasEndpoint: !!body.endpoint,
-    endpointPrefix: body.endpoint?.substring(0, 20) || null,
     hasP256dh: !!body.p256dh,
     hasAuth: !!body.auth,
     hasKeys: !!(body as any).keys,
     hasKeysP256dh: !!(body as any).keys?.p256dh,
     hasKeysAuth: !!(body as any).keys?.auth,
+    hasFacilityId: !!(body as any).facilityId || !!(body as any).facility_id,
   })
 
   // keys オブジェクトから取得を試みる（クライアント側の送信形式に対応）
@@ -80,21 +82,28 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 3) current_facility_id を取得
-  const { facilityId, error: userErr } = await getCurrentFacilityId(supabase, userId)
-  if (userErr) {
-    console.info('[push/subscribe] user-fetch-error', {
-      userId,
-      errorCode: userErr.code,
-      errorMessage: userErr.message?.substring(0, 100),
-    })
-    return NextResponse.json(
-      { ok: false, reason: 'user_fetch_error', message: userErr.message },
-      { status: 500 }
-    )
-  }
+  // 3) facilityId を取得（bodyから、またはDBから補完）
+  let facilityId: string | null = (body.facilityId ?? (body as any).facility_id ?? null)?.trim() || null
+  
   if (!facilityId) {
-    console.info('[push/subscribe] facility-id-missing', { userId })
+    // bodyにfacilityIdが無い場合、DBから補完を試みる
+    const { facilityId: dbFacilityId, error: userErr } = await getCurrentFacilityId(supabase, userId)
+    if (userErr) {
+      console.info('[push/subscribe] user-fetch-error', {
+        userId,
+        errorCode: userErr.code,
+        errorMessage: userErr.message?.substring(0, 100),
+      })
+      return NextResponse.json(
+        { ok: false, reason: 'user_fetch_error', message: userErr.message },
+        { status: 500 }
+      )
+    }
+    facilityId = dbFacilityId
+  }
+  
+  if (!facilityId) {
+    console.info('[push/subscribe] facility-id-missing', { userId, bodyHasFacilityId: !!(body.facilityId ?? (body as any).facility_id) })
     return NextResponse.json(
       { ok: false, reason: 'facility_id_missing', message: 'current_facility_id is not set' },
       { status: 400 }
@@ -179,7 +188,7 @@ export async function POST(request: NextRequest) {
     console.info('[push/subscribe] insert-error', {
       userId,
       facilityId,
-      endpointPrefix: endpoint.substring(0, 20),
+      hasEndpoint: !!endpoint,
       errorCode: insErr.code,
       errorMessage: insErr.message?.substring(0, 100),
     })
