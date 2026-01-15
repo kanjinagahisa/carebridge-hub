@@ -57,3 +57,4 @@ CREATE POLICY "Users can delete their own push subscriptions"
   ON push_subscriptions FOR DELETE
   USING (user_id = auth.uid());
 
+

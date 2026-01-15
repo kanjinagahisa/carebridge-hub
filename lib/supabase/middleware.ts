@@ -26,15 +26,17 @@ export async function updateSession(request: NextRequest) {
   console.log('[Middleware] Auth cookies found:', authCookies.length)
   if (authCookies.length > 0) {
     console.log('[Middleware] Auth cookie names:', authCookies.map(c => c.name))
-    // Cookieの値が存在するか確認（セキュリティ上、最初の50文字のみ表示）
+    // Cookieの値は秘匿情報のため出力しない（形式のみ確認）
     authCookies.forEach(cookie => {
-      const valuePreview = cookie.value ? cookie.value.substring(0, 50) + '...' : 'empty'
-      console.log(`[Middleware] Cookie ${cookie.name} value preview: ${valuePreview}`)
-      // クッキーの値がJSON形式かどうかを確認
+      const hasValue = !!cookie.value
       if (cookie.value && cookie.value.startsWith('{')) {
-        console.log(`[Middleware] Cookie ${cookie.name} appears to be JSON format`)
+        console.log(`[Middleware] Cookie ${cookie.name}: has value, JSON format`)
       } else if (cookie.value && cookie.value.startsWith('%')) {
-        console.log(`[Middleware] Cookie ${cookie.name} appears to be URL encoded`)
+        console.log(`[Middleware] Cookie ${cookie.name}: has value, URL encoded`)
+      } else if (hasValue) {
+        console.log(`[Middleware] Cookie ${cookie.name}: has value`)
+      } else {
+        console.log(`[Middleware] Cookie ${cookie.name}: empty`)
       }
     })
   }

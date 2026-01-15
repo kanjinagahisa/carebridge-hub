@@ -103,11 +103,12 @@ export async function sendPushNotificationsToFacility(
   const adminSupabase = createAdminClient()
 
   try {
-    // 同じfacilityの購読者を取得（投稿者本人は除外）
+    // 同じfacilityの購読者を取得（投稿者本人は除外、deleted=falseのみ）
     const { data: subscriptions, error: fetchError } = await adminSupabase
       .from('push_subscriptions')
-      .select('id, user_id, endpoint, p256dh, auth')
+      .select('id, user_id, endpoint, p256dh, auth, deleted')
       .eq('facility_id', facilityId)
+      .eq('deleted', false)
       .neq('user_id', authorId)
 
     if (fetchError) {
@@ -119,6 +120,19 @@ export async function sendPushNotificationsToFacility(
       console.log('[push] No subscriptions found for facility:', facilityId)
       return result
     }
+
+    // 送信直前ログ：取得結果の詳細を出力
+    const deletedCount = subscriptions.filter((s) => s.deleted === true).length
+    const endpointSamples = subscriptions
+      .slice(0, 3)
+      .map((s) => s.endpoint?.substring(0, 50) + (s.endpoint && s.endpoint.length > 50 ? '...' : ''))
+    console.log('[push] Subscription fetch result:', {
+      facilityId,
+      authorId,
+      totalCount: subscriptions.length,
+      deletedTrueCount: deletedCount,
+      endpointSamples,
+    })
 
     console.log(`[push] Sending notifications to ${subscriptions.length} subscribers`)
 

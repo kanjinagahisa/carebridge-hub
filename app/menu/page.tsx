@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { LogOut, User, FileText, Shield, UserPlus, Settings, Bell } from 'lucide-react'
 import { PROFESSION_LABELS, ROLES } from '@/lib/constants'
 import LogoutButton from '@/components/LogoutButton'
+import FacilitySwitcher from '@/components/menu/FacilitySwitcher'
 
 // 認証が必要なページのため、動的レンダリングを強制
 export const dynamic = 'force-dynamic'
@@ -143,6 +144,23 @@ export default async function MenuPage() {
     console.log('[MenuPage] User is admin:', isAdmin)
     console.log('[MenuPage] Latest facility ID:', latestFacilityId)
 
+    // current_facility_id を取得（施設切り替えUIで使用）
+    const currentFacilityId = profile?.current_facility_id || null
+
+    // 施設切り替えUI用のデータを準備
+    const facilitiesForSwitcher = userFacilities?.map((uf) => {
+      const facility = uf.facilities as { name?: string } | { name?: string }[] | null | undefined
+      const facilityName = Array.isArray(facility)
+        ? facility[0]?.name
+        : (facility as { name?: string } | null | undefined)?.name
+      return {
+        facility_id: uf.facility_id,
+        name: facilityName || '施設名不明',
+        role: uf.role === ROLES.ADMIN ? '管理者' : 'スタッフ',
+        isCurrent: uf.facility_id === currentFacilityId,
+      }
+    }) || []
+
     return (
       <div className="min-h-screen bg-gray-100 pb-20">
         <Header title="メニュー" facilityName={facilityName || undefined} />
@@ -176,6 +194,14 @@ export default async function MenuPage() {
               プロフィール編集
             </Link>
           </div>
+
+          {/* 施設切り替え */}
+          {facilitiesForSwitcher.length > 1 && (
+            <FacilitySwitcher
+              facilities={facilitiesForSwitcher}
+              currentUserId={user.id}
+            />
+          )}
 
           {/* メニュー項目 */}
           <div className="bg-white rounded-xl shadow-sm">

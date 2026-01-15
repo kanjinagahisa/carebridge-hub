@@ -30,3 +30,4 @@ ALTER TABLE client_documents ENABLE ROW LEVEL SECURITY;
 
 
 
+

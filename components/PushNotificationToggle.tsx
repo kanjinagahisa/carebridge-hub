@@ -82,6 +82,31 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
     setMessage(null)
 
     try {
+      // 0. facilityIdを取得（必須）
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        throw new Error('認証が必要です。ログインしてください。')
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('users')
+        .select('current_facility_id')
+        .eq('id', user.id)
+        .eq('deleted', false)
+        .maybeSingle()
+
+      if (profileError) {
+        throw new Error('ユーザー情報の取得に失敗しました')
+      }
+
+      const facilityId = profile?.current_facility_id
+      if (!facilityId) {
+        setMessage({ type: 'error', text: '施設が未選択です。施設を選択してから再度お試しください。' })
+        setIsLoading(false)
+        return
+      }
+
       // 1. 通知許可の確認
       if (Notification.permission === 'default') {
         const permission = await Notification.requestPermission()
@@ -129,6 +154,7 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
             p256dh: arrayBufferToBase64(subscription.getKey('p256dh')!),
             auth: arrayBufferToBase64(subscription.getKey('auth')!),
           },
+          facilityId,
         }),
       })
 

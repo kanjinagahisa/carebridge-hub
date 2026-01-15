@@ -20,3 +20,4 @@ CREATE POLICY "Authenticated users can view facilities with valid invite codes"
 
 
 
+
