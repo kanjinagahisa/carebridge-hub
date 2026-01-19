@@ -1,187 +1,148 @@
 /* public/sw.js */
 
-/**
- * CareBridge Hub Service Worker
- * - Push通知を受けて表示
- * - 通知クリック時は「SWが直接navigateしない」
- *   → 既存タブへ postMessage({type:"NAVIGATE", url}) → focus
- *   → タブが無ければ openWindow
- * - Chromeクラッシュ等が起きても落ちにくいように try/catch を厚めに
- * - 任意で /api/sw-log にログを送れる（Vercel Logsで確認可能）
- */
+const SW_FILE = "public/sw.js";
 
-/** ====== 設定（必要なら変えてOK） ====== */
-const ENABLE_SW_LOG = true; // ログをサーバに送るなら true（/api/sw-log が必要）
-const SW_LOG_ENDPOINT = "/api/sw-log";
-
-/** ====== ユーティリティ ====== */
-function safeJsonParse(text) {
+function safeJsonParse(str) {
   try {
-    return JSON.parse(text);
+    return JSON.parse(str);
   } catch {
     return null;
   }
 }
 
-function buildTargetUrl(route) {
-  // route が "/clients/xxx/timeline" のような相対パスで来る想定
-  // もし "https://..." が来ても同一origin以外は弾く
+async function swLog(at, payload) {
   try {
-    const u = new URL(route, self.location.origin);
-    if (u.origin !== self.location.origin) {
-      return self.location.origin + "/";
-    }
-    return u.toString();
-  } catch {
-    return self.location.origin + "/";
-  }
-}
-
-async function swLog(payload) {
-  if (!ENABLE_SW_LOG) return;
-  try {
-    await fetch(SW_LOG_ENDPOINT, {
+    await fetch("/api/sw-log", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        ...payload,
+        at,
         ts: Date.now(),
-        sw: "public/sw.js",
+        sw: SW_FILE,
         origin: self.location.origin,
+        ...payload,
       }),
-      // Chromeが落ちても飛ぶ確率を上げる
-      keepalive: true,
     });
-  } catch {
-    // ログ送信失敗は無視
+  } catch (e) {
+    // ここで落ちても本筋に影響させない
   }
 }
 
-/** ====== インストール/アクティベート ====== */
 self.addEventListener("install", (event) => {
-  // 即時有効化（必要に応じて）
-  self.skipWaiting();
+  event.waitUntil((async () => {
+    self.skipWaiting();
+    await swLog("install", {});
+  })());
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    (async () => {
-      try {
-        await self.clients.claim();
-      } catch {
-        // ignore
-      }
-    })()
-  );
+  event.waitUntil((async () => {
+    await self.clients.claim();
+    await swLog("activate", {});
+  })());
 });
 
-/** ====== PUSH受信 → 通知表示 ======
- * 期待する payload 例（DevTools pushでもOK）
- * { "title":"🔔 click test", "body":"go timeline", "route":"/clients/xxx/timeline" }
- */
 self.addEventListener("push", (event) => {
-  event.waitUntil(
-    (async () => {
-      try {
-        const raw = event.data ? event.data.text() : "";
-        const data = safeJsonParse(raw) || {};
+  event.waitUntil((async () => {
+    let raw = "";
+    let parsed = null;
 
-        const title =
-          typeof data.title === "string" && data.title.trim()
-            ? data.title
-            : "お知らせ";
-
-        const body =
-          typeof data.body === "string" && data.body.trim()
-            ? data.body
-            : "";
-
-        const route =
-          typeof data.route === "string" && data.route.trim()
-            ? data.route
-            : "/";
-
-        const notificationOptions = {
-          body,
-          // ここが重要：クリック時に参照する
-          data: { route },
-          // 通知がまとめられて消えないようにしたいなら tag を固定にする等も可能
-          // tag: "carebridge",
-        };
-
-        await swLog({
-          at: "push",
-          raw,
-          parsed: data,
-          route,
-        });
-
-        await self.registration.showNotification(title, notificationOptions);
-      } catch (e) {
-        await swLog({
-          at: "push_error",
-          error: String(e),
-        });
+    try {
+      if (event.data) {
+        // JSON優先
+        try {
+          parsed = event.data.json();
+          raw = JSON.stringify(parsed);
+        } catch {
+          raw = event.data.text();
+          parsed = safeJsonParse(raw);
+        }
       }
-    })()
-  );
+    } catch {}
+
+    const title = (parsed && parsed.title) || "CareBridge Hub";
+    const body = (parsed && parsed.body) || "";
+
+    // ここが重要：route/urlの不一致を吸収する
+    const routeRaw =
+      (parsed && (parsed.route || parsed.url || parsed.path)) || "/";
+    const route = String(routeRaw).startsWith("/")
+      ? String(routeRaw)
+      : "/" + String(routeRaw);
+
+    await swLog("push", { raw, parsed, route });
+
+    const data = {
+      route,
+      raw,
+      parsed,
+    };
+
+    await self.registration.showNotification(title, {
+      body,
+      data,
+      // 必要ならicon/badgeを追加
+      // icon: "/assets/icon/icon-192.png",
+      // badge: "/assets/icon/icon-192.png",
+    });
+  })());
 });
 
-/** ====== 通知クリック ======
- * SWが client.navigate() を使わずに、
- * 既存タブへ postMessage で「遷移して」と依頼する（クラッシュ対策）
- */
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  event.waitUntil(
-    (async () => {
+  event.waitUntil((async () => {
+    const route =
+      (event.notification &&
+        event.notification.data &&
+        event.notification.data.route) ||
+      "/";
+
+    // クリックが発火した証拠を必ず残す（ここが原因究明の核心）
+    await swLog("click", {
+      route,
+      notificationData: event.notification && event.notification.data,
+    });
+
+    const targetUrl = new URL(route, self.location.origin).toString();
+
+    // 既存タブがあれば、そこにpostMessage（ページ側で遷移）
+    const list = await self.clients.matchAll({
+      type: "window",
+      includeUncontrolled: true,
+    });
+
+    if (list && list.length > 0) {
+      // まずフォーカス（ユーザー体感が良い）
       try {
-        const data = event.notification?.data || {};
-        const route = typeof data.route === "string" ? data.route : "/";
-        const targetUrl = buildTargetUrl(route);
+        await list[0].focus();
+      } catch {}
 
-        const clientList = await self.clients.matchAll({
-          type: "window",
-          includeUncontrolled: true,
-        });
-
-        await swLog({
-          at: "notificationclick",
-          route,
-          targetUrl,
-          clients: clientList.map((c) => c.url),
-        });
-
-        // 同一originのクライアントを優先
-        const sameOriginClients = clientList.filter((c) => {
-          try {
-            return new URL(c.url).origin === self.location.origin;
-          } catch {
-            return false;
-          }
-        });
-
-        const client = sameOriginClients[0];
-
-        if (client) {
-          // 重要：SWが直接navigateしない
-          client.postMessage({ type: "NAVIGATE", url: targetUrl });
-          await client.focus();
-          return;
-        }
-
-        // タブが無いときだけ openWindow
-        if (self.clients.openWindow) {
-          await self.clients.openWindow(targetUrl);
-        }
-      } catch (e) {
-        await swLog({
-          at: "notificationclick_error",
-          error: String(e),
-        });
-        // 例外は握りつぶす（ここでSWが死ぬのが一番まずい）
+      // 全タブに指示（どれかが受け取ればOK）
+      for (const client of list) {
+        try {
+          client.postMessage({
+            type: "SW_NAVIGATE",
+            route,
+            url: targetUrl,
+            ts: Date.now(),
+          });
+        } catch {}
       }
-    })()
-  );
+
+      await swLog("click_postmessage_sent", {
+        route,
+        clients: list.map((c) => c.url),
+      });
+      return;
+    }
+
+    // タブが無いなら新規で開く（最終手段）
+    if (self.clients.openWindow) {
+      await swLog("click_openWindow", { route, url: targetUrl });
+      await self.clients.openWindow(targetUrl);
+    } else {
+      await swLog("click_openWindow_unavailable", { route, url: targetUrl });
+    }
+  })());
 });
