@@ -8,18 +8,26 @@ export default function SwMessageBridge() {
 
     const handler = (event: MessageEvent) => {
       const data: any = event.data;
-      if (!data || data.type !== "NAVIGATE") return;
+      if (!data) return;
 
-      const url = data.url;
-      if (typeof url !== "string") return;
+      const t = data.type;
+      if (t !== "NAVIGATE" && t !== "SW_NAVIGATE") return;
+
+      const raw =
+        typeof data.url === "string"
+          ? data.url
+          : typeof data.route === "string"
+            ? data.route
+            : "";
+      if (!raw) return;
 
       try {
-        // 相対でも絶対でも扱えるように base を付ける
-        const u = new URL(url, location.origin);
-        if (u.origin !== location.origin) return;
-        location.assign(u.toString());
-      } catch {
-        // ignore
+        const u = new URL(raw, window.location.origin);
+        if (u.origin !== window.location.origin) return;
+        console.log("[SwMessageBridge] navigate:", u.toString(), "payload:", data);
+        window.location.assign(u.toString());
+      } catch (e) {
+        console.warn("[SwMessageBridge] invalid url:", raw, e);
       }
     };
 
