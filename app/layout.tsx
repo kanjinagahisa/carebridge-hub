@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import SwMessageBridge from "./SwMessageBridge";
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -41,7 +42,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        <SwMessageBridge />
+        {children}
+      </body>
     </html>
   )
 }
