@@ -110,57 +110,49 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   event.waitUntil((async () => {
-    const route =
-      (event.notification &&
-        event.notification.data &&
-        event.notification.data.route) ||
-      "/";
+    try {
+      const data = event.notification?.data ?? null;
+      const route =
+        data && typeof data.route === "string" ? data.route : null;
+      const dataUrl =
+        data && typeof data.url === "string" ? data.url : null;
+      const rawUrl = route ?? dataUrl ?? "/home";
+      const url = new URL(rawUrl, self.location.origin).toString();
 
-    // クリックが発火した証拠を必ず残す（ここが原因究明の核心）
-    await swLog("click", {
-      route,
-      notificationData: event.notification && event.notification.data,
-    });
+      const list = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
 
-    const targetUrl = new URL(route, self.location.origin).toString();
-
-    // 既存タブがあれば、そこにpostMessage（ページ側で遷移）
-    const list = await self.clients.matchAll({
-      type: "window",
-      includeUncontrolled: true,
-    });
-
-    if (list && list.length > 0) {
-      // まずフォーカス（ユーザー体感が良い）
-      try {
-        await list[0].focus();
-      } catch {}
-
-      // 全タブに指示（どれかが受け取ればOK）
-      for (const client of list) {
+      const sameOrigin = (list || []).filter((c) => {
         try {
-          client.postMessage({
-            type: "SW_NAVIGATE",
-            route,
-            url: targetUrl,
-            ts: Date.now(),
-          });
+          return new URL(c.url).origin === self.location.origin;
+        } catch {
+          return false;
+        }
+      });
+
+      if (sameOrigin.length > 0) {
+        try {
+          await sameOrigin[0].focus();
         } catch {}
+
+        for (const client of sameOrigin) {
+          try {
+            client.postMessage({
+              type: "SW_NAVIGATE",
+              url,
+            });
+          } catch {}
+        }
+        return;
       }
 
-      await swLog("click_postmessage_sent", {
-        route,
-        clients: list.map((c) => c.url),
-      });
-      return;
-    }
-
-    // タブが無いなら新規で開く（最終手段）
-    if (self.clients.openWindow) {
-      await swLog("click_openWindow", { route, url: targetUrl });
-      await self.clients.openWindow(targetUrl);
-    } else {
-      await swLog("click_openWindow_unavailable", { route, url: targetUrl });
+      if (self.clients.openWindow) {
+        await self.clients.openWindow(url);
+      }
+    } catch (e) {
+      console.error("[SW-CLICK] failed", e);
     }
   })());
 });
