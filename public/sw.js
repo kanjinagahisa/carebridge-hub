@@ -89,6 +89,24 @@ self.addEventListener("push", (event) => {
 });
 
 self.addEventListener("notificationclick", (event) => {
+  const rawData = event.notification?.data ?? null;
+  console.log("[SW-CLICK]", rawData);
+  event.waitUntil((async () => {
+    try {
+      await fetch("/api/sw-log", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          at: "notificationclick",
+          ts: new Date().toISOString(),
+          route: rawData?.route ?? null,
+          rawData,
+        }),
+      });
+    } catch (e) {
+      console.warn("[SW-CLICK] log failed", e);
+    }
+  })());
   event.notification.close();
 
   event.waitUntil((async () => {
