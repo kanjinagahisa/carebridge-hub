@@ -10,6 +10,15 @@ function safeJsonParse(str) {
   }
 }
 
+function normalizeRoute(route) {
+  if (!route || typeof route !== "string") return "/home";
+  let path = route.startsWith("/") ? route : "/" + route;
+  if (path === "/timeline") return "/clients";
+  if (path === "/home" || path === "/clients") return path;
+  if (/^\/clients\/[0-9a-f-]{36}\/timeline$/.test(path)) return path;
+  return "/home";
+}
+
 async function swLog(at, payload) {
   try {
     await fetch("/api/sw-log", {
@@ -90,7 +99,9 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   const rawData = event.notification?.data ?? null;
+  event.notification.close();
   console.log("[SW-CLICK]", rawData);
+
   event.waitUntil((async () => {
     try {
       await fetch("/api/sw-log", {
@@ -106,50 +117,36 @@ self.addEventListener("notificationclick", (event) => {
     } catch (e) {
       console.warn("[SW-CLICK] log failed", e);
     }
-  })());
-  event.notification.close();
 
-  event.waitUntil((async () => {
     try {
-      const data = event.notification?.data ?? null;
-      const route =
-        data && typeof data.route === "string" ? data.route : null;
-      const dataUrl =
-        data && typeof data.url === "string" ? data.url : null;
-      const rawUrl = route ?? dataUrl ?? "/home";
-      const url = new URL(rawUrl, self.location.origin).toString();
+      const data = rawData ?? null;
+      const route = data && typeof data.route === "string" ? data.route : "";
+      const safeRoute = normalizeRoute(route);
 
       const list = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
 
-      const sameOrigin = (list || []).filter((c) => {
+      if (list && list.length > 0) {
+        const client = list[0];
         try {
-          return new URL(c.url).origin === self.location.origin;
-        } catch {
-          return false;
-        }
-      });
-
-      if (sameOrigin.length > 0) {
-        try {
-          await sameOrigin[0].focus();
+          await client.focus();
         } catch {}
-
-        for (const client of sameOrigin) {
-          try {
-            client.postMessage({
-              type: "SW_NAVIGATE",
-              url,
-            });
-          } catch {}
-        }
+        try {
+          client.postMessage({ type: "NAVIGATE", route: safeRoute });
+        } catch {}
         return;
       }
 
       if (self.clients.openWindow) {
-        await self.clients.openWindow(url);
+        const homeUrl = new URL("/home", self.location.origin).toString();
+        const opened = await self.clients.openWindow(homeUrl);
+        if (opened) {
+          try {
+            opened.postMessage({ type: "NAVIGATE", route: safeRoute });
+          } catch {}
+        }
       }
     } catch (e) {
       console.error("[SW-CLICK] failed", e);
