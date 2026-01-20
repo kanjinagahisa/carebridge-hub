@@ -1,8 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function SwMessageBridge() {
+  const router = useRouter();
+
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
@@ -11,7 +14,13 @@ export default function SwMessageBridge() {
       if (!data) return;
 
       const t = data.type;
-      if (t !== "NAVIGATE" && t !== "SW_NAVIGATE") return;
+      if (t === "NAVIGATE") {
+        const route = typeof data.route === "string" ? data.route : "";
+        if (!route || !route.startsWith("/")) return;
+        router.push(route);
+        return;
+      }
+      if (t !== "SW_NAVIGATE") return;
 
       const raw =
         typeof data.url === "string"
@@ -33,7 +42,7 @@ export default function SwMessageBridge() {
 
     navigator.serviceWorker.addEventListener("message", handler);
     return () => navigator.serviceWorker.removeEventListener("message", handler);
-  }, []);
+  }, [router]);
 
   return null;
 }
