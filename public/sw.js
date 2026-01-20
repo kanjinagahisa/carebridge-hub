@@ -99,54 +99,58 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   const rawData = event.notification?.data ?? null;
+
   event.notification.close();
-  console.log("[SW-CLICK]", rawData);
 
   event.waitUntil((async () => {
     try {
-      await fetch("/api/sw-log", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          at: "notificationclick",
-          ts: new Date().toISOString(),
-          route: rawData?.route ?? null,
-          rawData,
-        }),
-      });
-    } catch (e) {
-      console.warn("[SW-CLICK] log failed", e);
-    }
+      // 1) ログ（クリックが発火してるか確定できる）
+      try {
+        await fetch("/api/sw-log", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            at: "notificationclick",
+            ts: new Date().toISOString(),
+            route: rawData?.route ?? null,
+            rawData,
+          }),
+        });
+      } catch {}
 
-    try {
-      const data = rawData ?? null;
-      const route = data && typeof data.route === "string" ? data.route : "";
-      const safeRoute = normalizeRoute(route);
+      // 2) 遷移先URLを作る
+      const data = rawData;
+      const route = data && typeof data.route === "string" ? data.route : null;
+      const dataUrl = data && typeof data.url === "string" ? data.url : null;
+      const rawUrl = route ?? dataUrl ?? "/home";
+      const url = new URL(rawUrl, self.location.origin).toString();
 
+      // 3) 既存タブがあれば “そのタブ自体を遷移” させる（最重要）
       const list = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
       });
 
-      if (list && list.length > 0) {
-        const client = list[0];
-        try {
-          await client.focus();
-        } catch {}
-        try {
-          client.postMessage({ type: "NAVIGATE", route: safeRoute });
-        } catch {}
+      // 同一オリジンのタブだけ
+      const sameOrigin = (list || []).filter((c) => {
+        try { return new URL(c.url).origin === self.location.origin; }
+        catch { return false; }
+      });
+
+      if (sameOrigin.length > 0) {
+        const client = sameOrigin[0];
+
+        if ("navigate" in client) {
+          try { await client.navigate(url); } catch {}
+        }
+
+        try { await client.focus(); } catch {}
         return;
       }
 
+      // 4) タブが無ければ新規で開く
       if (self.clients.openWindow) {
-        const homeUrl = new URL("/home", self.location.origin).toString();
-        const opened = await self.clients.openWindow(homeUrl);
-        if (opened) {
-          try {
-            opened.postMessage({ type: "NAVIGATE", route: safeRoute });
-          } catch {}
-        }
+        await self.clients.openWindow(url);
       }
     } catch (e) {
       console.error("[SW-CLICK] failed", e);
