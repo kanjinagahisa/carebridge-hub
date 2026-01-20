@@ -104,28 +104,22 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil((async () => {
     try {
-      // 1) ログ（クリックが発火してるか確定できる）
-      try {
-        await fetch("/api/sw-log", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            at: "notificationclick",
-            ts: new Date().toISOString(),
-            route: rawData?.route ?? null,
-            rawData,
-          }),
-        });
-      } catch {}
-
-      // 2) 遷移先URLを作る
+      // 1) 遷移先URLを作る
       const data = rawData;
       const route = data && typeof data.route === "string" ? data.route : null;
       const dataUrl = data && typeof data.url === "string" ? data.url : null;
       const rawUrl = route ?? dataUrl ?? "/home";
-      const url = new URL(rawUrl, self.location.origin).toString();
+      const normalizedPath = normalizeRoute(rawUrl);
+      const targetUrl = new URL(normalizedPath, self.location.origin).toString();
 
-      // 3) 既存タブがあれば “そのタブ自体を遷移” させる（最重要）
+      await swLog("notificationclick", {
+        route,
+        normalizedPath,
+        targetUrl,
+        rawData,
+      });
+
+      // 2) 既存タブがあれば “そのタブ自体を遷移” させる（最重要）
       const list = await self.clients.matchAll({
         type: "window",
         includeUncontrolled: true,
@@ -139,20 +133,59 @@ self.addEventListener("notificationclick", (event) => {
 
       if (sameOrigin.length > 0) {
         const client = sameOrigin[0];
+        let navigated = false;
 
-        if ("navigate" in client) {
-          try { await client.navigate(url); } catch {}
+        try {
+          await client.focus();
+          await swLog("notificationclick.focus_ok", { targetUrl, rawData });
+        } catch (e) {
+          await swLog("notificationclick.focus_failed", { targetUrl, rawData });
         }
 
-        try { await client.focus(); } catch {}
+        if ("navigate" in client) {
+          try {
+            await client.navigate(targetUrl);
+            navigated = true;
+            await swLog("notificationclick.navigate_ok", { targetUrl, rawData });
+          } catch (e) {
+            await swLog("notificationclick.navigate_failed", { targetUrl, rawData });
+          }
+        }
+
+        if (!navigated && self.clients.openWindow) {
+          try {
+            await self.clients.openWindow(targetUrl);
+            await swLog("notificationclick.openWindow_fallback", {
+              targetUrl,
+              rawData,
+            });
+          } catch (e) {
+            await swLog("notificationclick.openWindow_failed", {
+              targetUrl,
+              rawData,
+            });
+          }
+        }
+
         return;
       }
 
-      // 4) タブが無ければ新規で開く
+      // 3) タブが無ければ新規で開く
       if (self.clients.openWindow) {
-        await self.clients.openWindow(url);
+        try {
+          await self.clients.openWindow(targetUrl);
+          await swLog("notificationclick.openWindow_ok", { targetUrl, rawData });
+        } catch (e) {
+          await swLog("notificationclick.openWindow_failed", { targetUrl, rawData });
+        }
       }
     } catch (e) {
+      try {
+        await swLog("notificationclick.error", {
+          message: String(e),
+          rawData,
+        });
+      } catch {}
       console.error("[SW-CLICK] failed", e);
     }
   })());
