@@ -20,10 +20,13 @@ function normalizeRoute(route) {
 }
 
 async function swLog(at, payload) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2000);
   try {
     await fetch("/api/sw-log", {
       method: "POST",
       headers: { "content-type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         at,
         ts: Date.now(),
@@ -34,6 +37,8 @@ async function swLog(at, payload) {
     });
   } catch (e) {
     // ここで落ちても本筋に影響させない
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -112,73 +117,77 @@ self.addEventListener("notificationclick", (event) => {
       const normalizedPath = normalizeRoute(rawUrl);
       const targetUrl = new URL(normalizedPath, self.location.origin).toString();
 
-      await swLog("notificationclick", {
+      const logPromise = swLog("notificationclick", {
         route,
         normalizedPath,
         targetUrl,
         rawData,
       });
 
-      // 2) 既存タブがあれば “そのタブ自体を遷移” させる（最重要）
-      const list = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
+      const navPromise = (async () => {
+        // 2) 既存タブがあれば “そのタブ自体を遷移” させる（最重要）
+        const list = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
 
-      // 同一オリジンのタブだけ
-      const sameOrigin = (list || []).filter((c) => {
-        try { return new URL(c.url).origin === self.location.origin; }
-        catch { return false; }
-      });
+        // 同一オリジンのタブだけ
+        const sameOrigin = (list || []).filter((c) => {
+          try { return new URL(c.url).origin === self.location.origin; }
+          catch { return false; }
+        });
 
-      if (sameOrigin.length > 0) {
-        const client = sameOrigin[0];
-        let navigated = false;
+        if (sameOrigin.length > 0) {
+          const client = sameOrigin[0];
+          let navigated = false;
 
-        try {
-          await client.focus();
-          await swLog("notificationclick.focus_ok", { targetUrl, rawData });
-        } catch (e) {
-          await swLog("notificationclick.focus_failed", { targetUrl, rawData });
-        }
-
-        if ("navigate" in client) {
           try {
-            await client.navigate(targetUrl);
-            navigated = true;
-            await swLog("notificationclick.navigate_ok", { targetUrl, rawData });
+            await client.focus();
+            await swLog("notificationclick.focus_ok", { targetUrl, rawData });
           } catch (e) {
-            await swLog("notificationclick.navigate_failed", { targetUrl, rawData });
+            await swLog("notificationclick.focus_failed", { targetUrl, rawData });
           }
+
+          if ("navigate" in client) {
+            try {
+              await client.navigate(targetUrl);
+              navigated = true;
+              await swLog("notificationclick.navigate_ok", { targetUrl, rawData });
+            } catch (e) {
+              await swLog("notificationclick.navigate_failed", { targetUrl, rawData });
+            }
+          }
+
+          if (!navigated && self.clients.openWindow) {
+            try {
+              await self.clients.openWindow(targetUrl);
+              await swLog("notificationclick.openWindow_fallback", {
+                targetUrl,
+                rawData,
+              });
+            } catch (e) {
+              await swLog("notificationclick.openWindow_failed", {
+                targetUrl,
+                rawData,
+              });
+            }
+          }
+
+          return;
         }
 
-        if (!navigated && self.clients.openWindow) {
+        // 3) タブが無ければ新規で開く
+        if (self.clients.openWindow) {
           try {
             await self.clients.openWindow(targetUrl);
-            await swLog("notificationclick.openWindow_fallback", {
-              targetUrl,
-              rawData,
-            });
+            await swLog("notificationclick.openWindow_ok", { targetUrl, rawData });
           } catch (e) {
-            await swLog("notificationclick.openWindow_failed", {
-              targetUrl,
-              rawData,
-            });
+            await swLog("notificationclick.openWindow_failed", { targetUrl, rawData });
           }
         }
+      })();
 
-        return;
-      }
-
-      // 3) タブが無ければ新規で開く
-      if (self.clients.openWindow) {
-        try {
-          await self.clients.openWindow(targetUrl);
-          await swLog("notificationclick.openWindow_ok", { targetUrl, rawData });
-        } catch (e) {
-          await swLog("notificationclick.openWindow_failed", { targetUrl, rawData });
-        }
-      }
+      await Promise.allSettled([navPromise, logPromise]);
     } catch (e) {
       try {
         await swLog("notificationclick.error", {
