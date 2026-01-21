@@ -2,7 +2,7 @@
 
 // NOTE:
 // - swLog は “失敗しても本筋に影響させない” ため、基本は fire-and-forget（awaitしない）にしています。
-// - install/activate/push/click などの waitUntil では、必要な処理（showNotification / navigate 等）だけを待ちます。
+// - install/activate/push/click などの waitUntil では、必要な処理（showNotification / openWindow 等）だけを待ちます。
 
 const SW_FILE = "public/sw.js";
 
@@ -31,7 +31,10 @@ async function swLog(at, payload) {
   const timeoutId = setTimeout(() => controller.abort(), 2000);
 
   try {
-    await fetch("/api/sw-log", {
+    // ✅ SWでは相対パスより絶対URLの方が事故りにくい
+    const endpoint = new URL("/api/sw-log", self.location.origin).toString();
+
+    await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       signal: controller.signal,
@@ -123,7 +126,6 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   const rawData = event.notification?.data ?? null;
-
   event.notification.close();
 
   event.waitUntil(
@@ -138,89 +140,37 @@ self.addEventListener("notificationclick", (event) => {
         const normalizedPath = normalizeRoute(rawUrl);
         const targetUrl = new URL(normalizedPath, self.location.origin).toString();
 
-        // fire-and-forget（ただし waitUntil 内にいるので “送れるなら送る” 程度）
-        // await せず、後続のナビゲーションを優先
-        void swLog("notificationclick", {
+        // クリック開始ログ（awaitしない）
+        void swLog("click:start", {
           route,
           normalizedPath,
           targetUrl,
           rawData,
         });
 
-        // 2) 既存タブがあれば “そのタブ自体を遷移” させる（最重要）
+        // ✅ 最優先：クリック後すぐ遷移を開始させる（既存タブ探索/ navigate は一旦しない）
+        if (self.clients.openWindow) {
+          await self.clients.openWindow(targetUrl);
+          void swLog("click:openWindow_ok", { targetUrl });
+          return;
+        }
+
+        // openWindow が無い超レア環境向けフォールバック
         const list = await self.clients.matchAll({
           type: "window",
           includeUncontrolled: true,
         });
 
-        // 同一オリジンのタブだけ
-        const sameOrigin = (list || []).filter((c) => {
+        if (list && list[0]) {
           try {
-            return new URL(c.url).origin === self.location.origin;
+            await list[0].focus();
+            void swLog("click:fallback_focus_ok", { targetUrl });
           } catch {
-            return false;
-          }
-        });
-
-        if (sameOrigin.length > 0) {
-          const client = sameOrigin[0];
-          let navigated = false;
-
-          try {
-            await client.focus();
-            void swLog("notificationclick.focus_ok", { targetUrl, rawData });
-          } catch {
-            void swLog("notificationclick.focus_failed", { targetUrl, rawData });
-          }
-
-          if ("navigate" in client) {
-            try {
-              await client.navigate(targetUrl);
-              navigated = true;
-              void swLog("notificationclick.navigate_ok", { targetUrl, rawData });
-            } catch {
-              void swLog("notificationclick.navigate_failed", { targetUrl, rawData });
-            }
-          }
-
-          // navigateできない/失敗した場合のフォールバック
-          if (!navigated && self.clients.openWindow) {
-            try {
-              await self.clients.openWindow(targetUrl);
-              void swLog("notificationclick.openWindow_fallback", {
-                targetUrl,
-                rawData,
-              });
-            } catch {
-              void swLog("notificationclick.openWindow_failed", {
-                targetUrl,
-                rawData,
-              });
-            }
-          }
-
-          return;
-        }
-
-        // 3) タブが無ければ新規で開く
-        if (self.clients.openWindow) {
-          try {
-            await self.clients.openWindow(targetUrl);
-            void swLog("notificationclick.openWindow_ok", { targetUrl, rawData });
-          } catch {
-            void swLog("notificationclick.openWindow_failed", { targetUrl, rawData });
+            void swLog("click:fallback_focus_failed", { targetUrl });
           }
         }
       } catch (e) {
-        try {
-          void swLog("notificationclick.error", {
-            message: String(e),
-            rawData,
-          });
-        } catch {
-          // ignore
-        }
-        // SW内consoleは環境により見えないが、残してOK
+        void swLog("click:error", { message: String(e), rawData });
         console.error("[SW-CLICK] failed", e);
       }
     })()
