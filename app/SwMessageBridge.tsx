@@ -7,9 +7,12 @@ export default function SwMessageBridge() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-
     const handler = (event: MessageEvent) => {
+      if (event?.data?.type === "SW_NAVIGATE" && event.data.url) {
+        window.location.href = event.data.url;
+        return;
+      }
+
       const data: any = event.data;
       if (!data) return;
 
@@ -40,8 +43,8 @@ export default function SwMessageBridge() {
       }
     };
 
-    navigator.serviceWorker.addEventListener("message", handler);
-    return () => navigator.serviceWorker.removeEventListener("message", handler);
+    navigator.serviceWorker?.addEventListener("message", handler);
+    return () => navigator.serviceWorker?.removeEventListener("message", handler);
   }, [router]);
 
   return null;

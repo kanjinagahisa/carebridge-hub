@@ -131,7 +131,6 @@ self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     (async () => {
       try {
-        // 1) 遷移先URLを作る
         const data = rawData;
         const route = data && typeof data.route === "string" ? data.route : null;
         const dataUrl = data && typeof data.url === "string" ? data.url : null;
@@ -140,37 +139,67 @@ self.addEventListener("notificationclick", (event) => {
         const normalizedPath = normalizeRoute(rawUrl);
         const targetUrl = new URL(normalizedPath, self.location.origin).toString();
 
-        // クリック開始ログ（awaitしない）
-        void swLog("click:start", {
-          route,
-          normalizedPath,
-          targetUrl,
-          rawData,
-        });
+        void swLog("notificationclick", { route, normalizedPath, targetUrl, rawData });
 
-        // ✅ 最優先：クリック後すぐ遷移を開始させる（既存タブ探索/ navigate は一旦しない）
-        if (self.clients.openWindow) {
-          await self.clients.openWindow(targetUrl);
-          void swLog("click:openWindow_ok", { targetUrl });
-          return;
-        }
-
-        // openWindow が無い超レア環境向けフォールバック
+        // 1) 既存タブがあればそれを使う
         const list = await self.clients.matchAll({
           type: "window",
           includeUncontrolled: true,
         });
 
-        if (list && list[0]) {
+        const sameOrigin = (list || []).filter((c) => {
           try {
-            await list[0].focus();
-            void swLog("click:fallback_focus_ok", { targetUrl });
+            return new URL(c.url).origin === self.location.origin;
           } catch {
-            void swLog("click:fallback_focus_failed", { targetUrl });
+            return false;
+          }
+        });
+
+        if (sameOrigin.length > 0) {
+          // なるべく「今見ているっぽい」タブを優先
+          const client =
+            sameOrigin.find((c) => c.visibilityState === "visible") ?? sameOrigin[0];
+
+          // focus は待たない（開始だけ）
+          try {
+            client.focus();
+            void swLog("notificationclick.focus_started", { targetUrl });
+          } catch {
+            void swLog("notificationclick.focus_start_failed", { targetUrl });
+          }
+
+          // 可能なら navigate（これも待たない）
+          if ("navigate" in client) {
+            try {
+              client.navigate(targetUrl);
+              void swLog("notificationclick.navigate_started", { targetUrl });
+              return;
+            } catch {
+              void swLog("notificationclick.navigate_start_failed", { targetUrl });
+            }
+          }
+
+          // navigate が無理なら postMessage（ページ側で受けて遷移）
+          try {
+            client.postMessage({ type: "SW_NAVIGATE", url: targetUrl });
+            void swLog("notificationclick.postMessage_sent", { targetUrl });
+            return;
+          } catch {
+            void swLog("notificationclick.postMessage_failed", { targetUrl });
+          }
+        }
+
+        // 2) タブが無い時だけ openWindow（待たない）
+        if (self.clients.openWindow) {
+          try {
+            self.clients.openWindow(targetUrl);
+            void swLog("notificationclick.openWindow_started", { targetUrl });
+          } catch {
+            void swLog("notificationclick.openWindow_start_failed", { targetUrl });
           }
         }
       } catch (e) {
-        void swLog("click:error", { message: String(e), rawData });
+        void swLog("notificationclick.error", { message: String(e), rawData });
         console.error("[SW-CLICK] failed", e);
       }
     })()
