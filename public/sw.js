@@ -125,107 +125,20 @@ self.addEventListener("push", (event) => {
 });
 
 self.addEventListener("notificationclick", (event) => {
-  const rawData = event.notification?.data ?? null;
-  event.notification.close();
+  event.notification?.close();
 
-  event.waitUntil(
-    (async () => {
-      try {
-        const data = rawData;
-        const route = data && typeof data.route === "string" ? data.route : null;
-        const dataUrl = data && typeof data.url === "string" ? data.url : null;
+  event.waitUntil((async () => {
+    const url = new URL("/clients", self.location.origin).href;
 
-        const rawUrl = route ?? dataUrl ?? "/home";
-        const normalizedPath = normalizeRoute(rawUrl);
-        const targetUrl = new URL(normalizedPath, self.location.origin).toString();
-
-        void swLog("notificationclick", { route, normalizedPath, targetUrl, rawData });
-
-        // 1) 既存タブがあればそれを使う
-        const list = await self.clients.matchAll({
-          type: "window",
-          includeUncontrolled: true,
-        });
-
-        const sameOrigin = (list || []).filter((c) => {
-          try {
-            return new URL(c.url).origin === self.location.origin;
-          } catch {
-            return false;
-          }
-        });
-
-        if (sameOrigin.length > 0) {
-          const visibleClient = sameOrigin.find(
-            (c) => c.visibilityState === "visible"
-          );
-          let client = visibleClient ?? null;
-
-          if (!client) {
-            if (self.clients.openWindow) {
-              try {
-                await self.clients.openWindow(targetUrl);
-                void swLog("notificationclick.openWindow_ok", { targetUrl });
-                return;
-              } catch (e) {
-                void swLog("notificationclick.openWindow_ng", {
-                  message: String(e),
-                  targetUrl,
-                });
-              }
-            }
-            client = sameOrigin[0];
-          }
-
-          try {
-            await client.focus();
-            void swLog("notificationclick.focus_ok", { targetUrl });
-          } catch (e) {
-            void swLog("notificationclick.focus_ng", {
-              message: String(e),
-              targetUrl,
-            });
-          }
-
-          if ("navigate" in client) {
-            try {
-              await client.navigate(targetUrl);
-              void swLog("notificationclick.navigate_ok", { targetUrl });
-              return;
-            } catch (e) {
-              void swLog("notificationclick.navigate_ng", {
-                message: String(e),
-                targetUrl,
-              });
-            }
-          }
-
-          // navigate が無理なら postMessage（ページ側で受けて遷移）
-          try {
-            client.postMessage({ type: "SW_NAVIGATE", url: targetUrl });
-            void swLog("notificationclick.postMessage_ok", { targetUrl });
-            return;
-          } catch (e) {
-            void swLog("notificationclick.postMessage_ng", {
-              message: String(e),
-              targetUrl,
-            });
-          }
-        }
-
-        // 2) タブが無い時だけ openWindow（待たない）
-        if (self.clients.openWindow) {
-          try {
-            self.clients.openWindow(targetUrl);
-            void swLog("notificationclick.openWindow_started", { targetUrl });
-          } catch {
-            void swLog("notificationclick.openWindow_start_failed", { targetUrl });
-          }
-        }
-      } catch (e) {
-        void swLog("notificationclick.error", { message: String(e), rawData });
-        console.error("[SW-CLICK] failed", e);
+    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const c of all) {
+      if (c.url && c.url.startsWith(self.location.origin)) {
+        try { await c.focus(); } catch {}
+        try { await c.navigate(url); } catch {}
+        return;
       }
-    })()
-  );
+    }
+
+    await self.clients.openWindow(url);
+  })());
 });
