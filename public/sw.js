@@ -156,36 +156,60 @@ self.addEventListener("notificationclick", (event) => {
         });
 
         if (sameOrigin.length > 0) {
-          // なるべく「今見ているっぽい」タブを優先
-          const client =
-            sameOrigin.find((c) => c.visibilityState === "visible") ?? sameOrigin[0];
+          const visibleClient = sameOrigin.find(
+            (c) => c.visibilityState === "visible"
+          );
+          let client = visibleClient ?? null;
 
-          // focus は待たない（開始だけ）
-          try {
-            client.focus();
-            void swLog("notificationclick.focus_started", { targetUrl });
-          } catch {
-            void swLog("notificationclick.focus_start_failed", { targetUrl });
+          if (!client) {
+            if (self.clients.openWindow) {
+              try {
+                await self.clients.openWindow(targetUrl);
+                void swLog("notificationclick.openWindow_ok", { targetUrl });
+                return;
+              } catch (e) {
+                void swLog("notificationclick.openWindow_ng", {
+                  message: String(e),
+                  targetUrl,
+                });
+              }
+            }
+            client = sameOrigin[0];
           }
 
-          // 可能なら navigate（これも待たない）
+          try {
+            await client.focus();
+            void swLog("notificationclick.focus_ok", { targetUrl });
+          } catch (e) {
+            void swLog("notificationclick.focus_ng", {
+              message: String(e),
+              targetUrl,
+            });
+          }
+
           if ("navigate" in client) {
             try {
-              client.navigate(targetUrl);
-              void swLog("notificationclick.navigate_started", { targetUrl });
+              await client.navigate(targetUrl);
+              void swLog("notificationclick.navigate_ok", { targetUrl });
               return;
-            } catch {
-              void swLog("notificationclick.navigate_start_failed", { targetUrl });
+            } catch (e) {
+              void swLog("notificationclick.navigate_ng", {
+                message: String(e),
+                targetUrl,
+              });
             }
           }
 
           // navigate が無理なら postMessage（ページ側で受けて遷移）
           try {
             client.postMessage({ type: "SW_NAVIGATE", url: targetUrl });
-            void swLog("notificationclick.postMessage_sent", { targetUrl });
+            void swLog("notificationclick.postMessage_ok", { targetUrl });
             return;
-          } catch {
-            void swLog("notificationclick.postMessage_failed", { targetUrl });
+          } catch (e) {
+            void swLog("notificationclick.postMessage_ng", {
+              message: String(e),
+              targetUrl,
+            });
           }
         }
 
