@@ -129,6 +129,27 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil((async () => {
     const url = new URL("/clients?from=notif", self.location.origin).href;
-    await self.clients.openWindow(url);
+
+    try {
+      // まず「クリックが発火した」ことを画面で確認できるようにする
+      await self.registration.showNotification("DEBUG: notificationclick fired", {
+        body: url,
+        tag: "debug-notif-click",
+      });
+
+      // 本命：新規タブで開く
+      await self.clients.openWindow(url);
+
+      // openWindow 成功/失敗は環境差があるので、念のため成功側も出す
+      await self.registration.showNotification("DEBUG: openWindow attempted", {
+        body: "If navigation didn't happen, openWindow may be blocked.",
+        tag: "debug-notif-click-2",
+      });
+    } catch (e) {
+      await self.registration.showNotification("DEBUG: openWindow FAILED", {
+        body: String(e),
+        tag: "debug-notif-click-error",
+      });
+    }
   })());
 });
