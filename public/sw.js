@@ -128,17 +128,7 @@ self.addEventListener("notificationclick", (event) => {
   event.notification?.close();
 
   event.waitUntil((async () => {
-    const url = new URL("/clients", self.location.origin).href;
-
-    const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-    for (const c of all) {
-      if (c.url && c.url.startsWith(self.location.origin)) {
-        try { await c.focus(); } catch {}
-        try { await c.navigate(url); } catch {}
-        return;
-      }
-    }
-
+    const url = new URL("/clients?from=notif", self.location.origin).href;
     await self.clients.openWindow(url);
   })());
 });
