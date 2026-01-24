@@ -80,6 +80,7 @@ async function focusOrOpen(url) {
   });
 
   if (sameOriginClient) {
+    console.log("[sw] notificationclick found client", sameOriginClient.url);
     try {
       if (sameOriginClient.focus) await sameOriginClient.focus();
     } catch {}
@@ -88,6 +89,7 @@ async function focusOrOpen(url) {
     try {
       if (sameOriginClient.navigate) {
         await sameOriginClient.navigate(url);
+        console.log("[sw] notificationclick navigated", url);
         return true;
       }
     } catch {
@@ -97,13 +99,16 @@ async function focusOrOpen(url) {
     // ② navigateできない環境用：ページ側に遷移を依頼（受け口が必要）
     try {
       sameOriginClient.postMessage({ type: "NAVIGATE", url });
+      console.log("[sw] notificationclick postMessage sent", url);
       return true;
     } catch {
-      // ここでダメなら最後にopenWindowへ
+      console.log("[sw] notificationclick postMessage failed", url);
     }
+    return false;
   }
 
   // ③ タブが無い：新規で開く
+  console.log("[sw] notificationclick openWindow", url);
   const win = await self.clients.openWindow(url);
   if (win?.focus) {
     try {
