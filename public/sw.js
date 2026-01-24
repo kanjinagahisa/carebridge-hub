@@ -182,7 +182,7 @@ self.addEventListener("push", (event) => {
 
       console.log("[sw] showNotification start. route=", route, "url=", url);
 
-      await self.registration.showNotification(title, {
+      const options = {
         body,
         data,
         tag: `cbh-${Date.now()}`,
@@ -192,7 +192,13 @@ self.addEventListener("push", (event) => {
           { action: "open", title: "開く" },
           { action: "dismiss", title: "閉じる" },
         ],
-      });
+      };
+
+      const debugId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      options.data = { ...(options.data || {}), debugId };
+      options.requireInteraction = true;
+
+      await self.registration.showNotification(title, options);
 
       console.log("[sw] showNotification done. route=", route, "url=", url);
     })()
@@ -200,6 +206,11 @@ self.addEventListener("push", (event) => {
 });
 
 self.addEventListener("notificationclick", (event) => {
+  console.log("[sw] notificationclick fired (debug)", {
+    debugId: event.notification?.data?.debugId,
+    data: event.notification?.data,
+    tag: event.notification?.tag,
+  });
   event.notification?.close();
 
   event.waitUntil(
