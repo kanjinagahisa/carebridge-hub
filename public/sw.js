@@ -122,6 +122,13 @@ self.addEventListener("push", (event) => {
       await self.registration.showNotification(title, {
         body,
         data,
+        tag: `cbh-${Date.now()}`,
+        renotify: true,
+        requireInteraction: true,
+        actions: [
+          { action: "open", title: "開く" },
+          { action: "dismiss", title: "閉じる" }
+        ],
         // 必要ならicon/badgeを追加
         // icon: "/assets/icon/icon-192.png",
         // badge: "/assets/icon/icon-192.png",
@@ -136,36 +143,19 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil((async () => {
     try {
-      console.log("[sw] notificationclick fired", event.notification?.data);
+      const action = event.action || "(body)";
       const rawData = event.notification?.data ?? null;
       const rawRoute = rawData && typeof rawData.route === "string" ? rawData.route : "/home";
       const route = normalizeRoute(rawRoute);
       const url = new URL(route, self.location.origin).toString();
-      console.log("[sw] opening url", url);
+      console.log("[sw] notificationclick fired", { action, rawRoute, route, url });
 
-      void swLog("notificationclick", { route, rawRoute, url, rawData });
+      void swLog("notificationclick", { action, rawRoute, route, url, rawData });
 
-      const clientsList = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-      console.log("[sw] clients count", clientsList.length);
+      if (action === "dismiss") return;
 
-      for (const client of clientsList) {
-        try {
-          if ("navigate" in client) {
-            await client.navigate(url);
-          } else {
-            throw new Error("navigate not supported");
-          }
-          if ("focus" in client) {
-            await client.focus();
-          }
-          return;
-        } catch {}
-      }
-
-      await self.clients.openWindow(url);
+      const win = await self.clients.openWindow(url);
+      if (win?.focus) await win.focus();
     } catch (e) {
       console.error("[sw] notificationclick error", e);
     }
