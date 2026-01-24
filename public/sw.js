@@ -174,7 +174,7 @@ self.addEventListener("push", (event) => {
 
       // ✅クリック遷移の主キー：data.url を必ず入れる
       const data = {
-        url,
+        url: route,
         route, // 互換
         raw,
         parsed,
