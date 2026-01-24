@@ -78,31 +78,36 @@ self.addEventListener("push", (event) => {
     (async () => {
       let raw = "";
       let parsed = null;
+      let text = "(no data)";
+      console.log("[sw] push event fired");
 
       try {
         if (event.data) {
           // JSON優先
           try {
-            parsed = event.data.json();
+            parsed = await event.data.json();
             raw = JSON.stringify(parsed);
           } catch {
-            raw = event.data.text();
+            raw = await event.data.text();
             parsed = safeJsonParse(raw);
           }
+          try {
+            text = await event.data.text();
+          } catch {}
         }
       } catch {
         // ignore
       }
+      console.log("[sw] push data(text)=", text);
+      console.log("[sw] push payload(json)=", parsed);
 
       const title = (parsed && parsed.title) || "CareBridge Hub";
       const body = (parsed && parsed.body) || "";
 
       // route/url/path の揺れを吸収
       const routeRaw =
-        (parsed && (parsed.route || parsed.url || parsed.path)) || "/";
-      const route = String(routeRaw).startsWith("/")
-        ? String(routeRaw)
-        : "/" + String(routeRaw);
+        (parsed && (parsed.route || parsed.url || parsed.path)) || "/home";
+      const route = normalizeRoute(routeRaw);
 
       // fire-and-forget（通知表示を遅らせない）
       void swLog("push", { raw, parsed, route });
@@ -113,6 +118,7 @@ self.addEventListener("push", (event) => {
         parsed,
       };
 
+      console.log("[sw] showNotification start. route=", route);
       await self.registration.showNotification(title, {
         body,
         data,
@@ -120,6 +126,7 @@ self.addEventListener("push", (event) => {
         // icon: "/assets/icon/icon-192.png",
         // badge: "/assets/icon/icon-192.png",
       });
+      console.log("[sw] showNotification done. route=", route);
     })()
   );
 });
@@ -128,23 +135,39 @@ self.addEventListener("notificationclick", (event) => {
   event.notification?.close();
 
   event.waitUntil((async () => {
-    const url = new URL("/clients", self.location.origin).href;
+    try {
+      console.log("[sw] notificationclick fired", event.notification?.data);
+      const rawData = event.notification?.data ?? null;
+      const rawRoute = rawData && typeof rawData.route === "string" ? rawData.route : "/home";
+      const route = normalizeRoute(rawRoute);
+      const url = new URL(route, self.location.origin).toString();
+      console.log("[sw] opening url", url);
 
-    const allClients = await self.clients.matchAll({
-      type: "window",
-      includeUncontrolled: true,
-    });
+      void swLog("notificationclick", { route, rawRoute, url, rawData });
 
-    // 既に開いているタブがあればそこを再利用
-    for (const client of allClients) {
-      if (client.url.startsWith(self.location.origin)) {
-        await client.focus();
-        await client.navigate(url);
-        return;
+      const clientsList = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      console.log("[sw] clients count", clientsList.length);
+
+      for (const client of clientsList) {
+        try {
+          if ("navigate" in client) {
+            await client.navigate(url);
+          } else {
+            throw new Error("navigate not supported");
+          }
+          if ("focus" in client) {
+            await client.focus();
+          }
+          return;
+        } catch {}
       }
-    }
 
-    // なければ新規で開く
-    await self.clients.openWindow(url);
+      await self.clients.openWindow(url);
+    } catch (e) {
+      console.error("[sw] notificationclick error", e);
+    }
   })());
 });
