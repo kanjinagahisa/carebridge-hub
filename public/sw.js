@@ -196,6 +196,12 @@ self.addEventListener("push", (event) => {
 
       const debugId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
       options.data = { ...(options.data || {}), debugId };
+      options.tag = options.tag || `cbh_${debugId}`;
+      options.body = `${options.body || ""} [debugId:${debugId}]`;
+      console.log("[sw] push debugId", debugId, {
+        data: options.data,
+        tag: options.tag,
+      });
       options.requireInteraction = true;
 
       await self.registration.showNotification(title, options);
