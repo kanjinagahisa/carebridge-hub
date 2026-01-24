@@ -59,6 +59,25 @@ function pickUrlFromNotificationData(rawData) {
     (rawData && typeof rawData.route === "string" && rawData.route) ||
     "/home";
 
+  // ✅ data.url がフルURLのケースに対応（後方互換）
+  // - same-origin の場合だけ rawUrl を優先採用
+  // - normalizeRoute へ渡すのは pathname のみ（query/hash で /home に落ちるのを防ぐ）
+  if (typeof rawUrl === "string" && /^https?:\/\//.test(rawUrl)) {
+    try {
+      const u = new URL(rawUrl);
+      const sameOrigin = u.origin === self.location.origin;
+
+      if (sameOrigin) {
+        const route = normalizeRoute(u.pathname);
+        const url = rawUrl; // フルURLはそのまま利用（search/hash含む）
+        return { rawUrl, route, url };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // 従来: route として扱う（/home など）
   const route = normalizeRoute(rawUrl);
   const url = new URL(route, self.location.origin).toString();
 
@@ -172,10 +191,10 @@ self.addEventListener("push", (event) => {
 
       void swLog("push", { raw, parsed, route, url });
 
-      // ✅クリック遷移の主キー：data.url を必ず入れる
+      // ✅クリック遷移の主キー：data.url を必ず入れる（フルURL）
       const data = {
-        url: route,
-        route, // 互換
+        url,
+        route, // 互換（/home 等）
         raw,
         parsed,
       };
@@ -226,11 +245,7 @@ self.addEventListener("notificationclick", (event) => {
         if (action === "dismiss") return;
 
         const rawData = event.notification?.data ?? null;
-        const { rawUrl, route } = pickUrlFromNotificationData(rawData);
-        const url =
-          typeof route === "string" && route.startsWith("/")
-            ? self.location.origin + route
-            : self.location.origin + normalizeRoute(route);
+        const { rawUrl, route, url } = pickUrlFromNotificationData(rawData);
 
         console.log("[sw] notificationclick fired", {
           action,
