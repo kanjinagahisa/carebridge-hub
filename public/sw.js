@@ -209,7 +209,11 @@ self.addEventListener("notificationclick", (event) => {
         if (action === "dismiss") return;
 
         const rawData = event.notification?.data ?? null;
-        const { rawUrl, route, url } = pickUrlFromNotificationData(rawData);
+        const { rawUrl, route } = pickUrlFromNotificationData(rawData);
+        const url =
+          typeof route === "string" && route.startsWith("/")
+            ? self.location.origin + route
+            : self.location.origin + normalizeRoute(route);
 
         console.log("[sw] notificationclick fired", {
           action,
