@@ -31,7 +31,6 @@ async function swLog(at, payload) {
   const timeoutId = setTimeout(() => controller.abort(), 2000);
 
   try {
-    // ✅ SWでは相対パスより絶対URLの方が事故りにくい
     const endpoint = new URL("/api/sw-log", self.location.origin).toString();
 
     await fetch(endpoint, {
@@ -47,17 +46,77 @@ async function swLog(at, payload) {
       }),
     });
   } catch {
-    // ここで落ちても本筋に影響させない
+    // ignore
   } finally {
     clearTimeout(timeoutId);
   }
+}
+
+function pickUrlFromNotificationData(rawData) {
+  // data.url → data.route → "/home"
+  const rawUrl =
+    (rawData && typeof rawData.url === "string" && rawData.url) ||
+    (rawData && typeof rawData.route === "string" && rawData.route) ||
+    "/home";
+
+  const route = normalizeRoute(rawUrl);
+  const url = new URL(route, self.location.origin).toString();
+
+  return { rawUrl, route, url };
+}
+
+async function focusOrOpen(url) {
+  const clientsList = await self.clients.matchAll({
+    type: "window",
+    includeUncontrolled: true,
+  });
+
+  const sameOriginClient = clientsList.find((c) => {
+    try {
+      return new URL(c.url).origin === self.location.origin;
+    } catch {
+      return false;
+    }
+  });
+
+  if (sameOriginClient) {
+    try {
+      if (sameOriginClient.focus) await sameOriginClient.focus();
+    } catch {}
+
+    // ① 可能ならnavigate（最強）
+    try {
+      if (sameOriginClient.navigate) {
+        await sameOriginClient.navigate(url);
+        return true;
+      }
+    } catch {
+      // navigateがダメなら次へ
+    }
+
+    // ② navigateできない環境用：ページ側に遷移を依頼（受け口が必要）
+    try {
+      sameOriginClient.postMessage({ type: "NAVIGATE", url });
+      return true;
+    } catch {
+      // ここでダメなら最後にopenWindowへ
+    }
+  }
+
+  // ③ タブが無い：新規で開く
+  const win = await self.clients.openWindow(url);
+  if (win?.focus) {
+    try {
+      await win.focus();
+    } catch {}
+  }
+  return !!win;
 }
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     (async () => {
       self.skipWaiting();
-      // fire-and-forget
       void swLog("install", {});
     })()
   );
@@ -67,7 +126,6 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     (async () => {
       await self.clients.claim();
-      // fire-and-forget
       void swLog("activate", {});
     })()
   );
@@ -83,7 +141,6 @@ self.addEventListener("push", (event) => {
 
       try {
         if (event.data) {
-          // JSON優先
           try {
             parsed = await event.data.json();
             raw = JSON.stringify(parsed);
@@ -95,30 +152,31 @@ self.addEventListener("push", (event) => {
             text = await event.data.text();
           } catch {}
         }
-      } catch {
-        // ignore
-      }
+      } catch {}
+
       console.log("[sw] push data(text)=", text);
       console.log("[sw] push payload(json)=", parsed);
 
       const title = (parsed && parsed.title) || "CareBridge Hub";
       const body = (parsed && parsed.body) || "";
 
-      // route/url/path の揺れを吸収
       const routeRaw =
         (parsed && (parsed.route || parsed.url || parsed.path)) || "/home";
       const route = normalizeRoute(routeRaw);
+      const url = new URL(route, self.location.origin).toString();
 
-      // fire-and-forget（通知表示を遅らせない）
-      void swLog("push", { raw, parsed, route });
+      void swLog("push", { raw, parsed, route, url });
 
+      // ✅クリック遷移の主キー：data.url を必ず入れる
       const data = {
-        route,
+        url,
+        route, // 互換
         raw,
         parsed,
       };
 
-      console.log("[sw] showNotification start. route=", route);
+      console.log("[sw] showNotification start. route=", route, "url=", url);
+
       await self.registration.showNotification(title, {
         body,
         data,
@@ -127,13 +185,11 @@ self.addEventListener("push", (event) => {
         requireInteraction: true,
         actions: [
           { action: "open", title: "開く" },
-          { action: "dismiss", title: "閉じる" }
+          { action: "dismiss", title: "閉じる" },
         ],
-        // 必要ならicon/badgeを追加
-        // icon: "/assets/icon/icon-192.png",
-        // badge: "/assets/icon/icon-192.png",
       });
-      console.log("[sw] showNotification done. route=", route);
+
+      console.log("[sw] showNotification done. route=", route, "url=", url);
     })()
   );
 });
@@ -141,23 +197,35 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification?.close();
 
-  event.waitUntil((async () => {
-    try {
-      const action = event.action || "(body)";
-      const rawData = event.notification?.data ?? null;
-      const rawRoute = rawData && typeof rawData.route === "string" ? rawData.route : "/home";
-      const route = normalizeRoute(rawRoute);
-      const url = new URL(route, self.location.origin).toString();
-      console.log("[sw] notificationclick fired", { action, rawRoute, route, url });
+  event.waitUntil(
+    (async () => {
+      try {
+        const action = event.action || "(body)";
+        if (action === "dismiss") return;
 
-      void swLog("notificationclick", { action, rawRoute, route, url, rawData });
+        const rawData = event.notification?.data ?? null;
+        const { rawUrl, route, url } = pickUrlFromNotificationData(rawData);
 
-      if (action === "dismiss") return;
+        console.log("[sw] notificationclick fired", {
+          action,
+          rawUrl,
+          route,
+          url,
+          rawData,
+        });
 
-      const win = await self.clients.openWindow(url);
-      if (win?.focus) await win.focus();
-    } catch (e) {
-      console.error("[sw] notificationclick error", e);
-    }
-  })());
+        void swLog("notificationclick", {
+          action,
+          rawUrl,
+          route,
+          url,
+          rawData,
+        });
+
+        await focusOrOpen(url);
+      } catch (e) {
+        console.error("[sw] notificationclick error", e);
+      }
+    })()
+  );
 });

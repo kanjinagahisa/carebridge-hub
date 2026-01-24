@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
-import SwMessageBridge from "./SwMessageBridge";
+import type { ReactNode } from "react";
+import SwMessageBridge from "./sw-message-bridge";
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -38,7 +39,7 @@ export const viewport: Viewport = {
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <html lang="ja">
