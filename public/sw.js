@@ -1,7 +1,5 @@
 /* public/sw.js */
 
-const SW_FILE = "public/sw.js";
-
 function safeJsonParse(str) {
   try {
     return JSON.parse(str);
@@ -13,166 +11,135 @@ function safeJsonParse(str) {
 function normalizeRoute(route) {
   if (!route || typeof route !== "string") return "/home";
   let path = route.startsWith("/") ? route : "/" + route;
-
-  // 既存仕様に合わせる（必要なら調整）
   if (path === "/timeline") return "/clients";
   if (path === "/home" || path === "/clients") return path;
   if (/^\/clients\/[0-9a-f-]{36}\/timeline$/.test(path)) return path;
-
   return "/home";
 }
 
-function toAbsoluteUrl(u) {
-  if (!u) return null;
+function toAbsoluteUrl(rawOrRoute) {
+  const origin = self.location.origin;
+  if (!rawOrRoute) return origin + "/home";
   try {
-    // すでに絶対URLならそのまま
-    const parsed = new URL(u);
-    return parsed.toString();
+    const u = new URL(rawOrRoute, origin);
+    return u.href;
   } catch {
-    // 相対なら origin 付与
-    try {
-      return new URL(u, self.location.origin).toString();
-    } catch {
-      return null;
-    }
+    const r = normalizeRoute(rawOrRoute);
+    return origin + r;
   }
-}
-
-async function focusOrOpen(targetUrl) {
-  const abs = toAbsoluteUrl(targetUrl) || toAbsoluteUrl("/home");
-
-  // 既存クライアントを探して、あれば navigate を優先
-  const clientList = await clients.matchAll({ type: "window", includeUncontrolled: true });
-
-  // 同一originのクライアント優先
-  const sameOriginClient = clientList.find((c) => {
-    try {
-      return new URL(c.url).origin === self.location.origin;
-    } catch {
-      return false;
-    }
-  });
-
-  if (sameOriginClient) {
-    try {
-      await sameOriginClient.focus();
-    } catch {}
-
-    // navigate は「同一タブで確実に遷移」させるための本命
-    try {
-      await sameOriginClient.navigate(abs);
-      return;
-    } catch {}
-
-    // navigate が失敗したら openWindow へ
-    try {
-      await clients.openWindow(abs);
-      return;
-    } catch {}
-  }
-
-  // クライアントが無い/見つからない場合は新規タブ
-  await clients.openWindow(abs);
 }
 
 self.addEventListener("install", (event) => {
-  // すぐ有効化
+  console.log("[sw] install", { scope: self.registration.scope, origin: self.location.origin });
   self.skipWaiting();
-  console.log("[sw] install", { file: SW_FILE, at: Date.now() });
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil((async () => {
-    console.log("[sw] activate", { file: SW_FILE, at: Date.now() });
-    await clients.claim();
-  })());
+  console.log("[sw] activate", { scope: self.registration.scope, origin: self.location.origin });
+  event.waitUntil(self.clients.claim());
 });
 
-/**
- * Push: payload から title/body/url を解釈して通知を出す
- * 重要: url は data.url / url / route などから拾う
- */
 self.addEventListener("push", (event) => {
-  event.waitUntil((async () => {
-    console.log("[sw] push event fired");
+  console.log("[sw] push event fired");
 
-    const rawText = event.data ? event.data.text() : null;
-    console.log("[sw] push payload raw:", rawText);
+  const rawText = event.data ? event.data.text() : "";
+  const parsed = safeJsonParse(rawText);
 
-    const parsed = rawText ? safeJsonParse(rawText) : null;
-    console.log("[sw] push payload parsed:", parsed);
+  console.log("[sw] push payload raw:", rawText || "(no payload)");
+  if (parsed) console.log("[sw] push payload parsed:", parsed);
 
-    // payload 取り出し（いろんな形を許容）
-    const title =
-      (parsed && (parsed.title || parsed.notification?.title)) ||
-      "CareBridge Hub";
+  const title = (parsed && parsed.title) || "CareBridge Hub";
+  const bodyBase = (parsed && parsed.body) || "新しいお知らせがあります。";
 
-    const bodyBase =
-      (parsed && (parsed.body || parsed.notification?.body)) ||
-      "新しいお知らせがあります。";
+  // url は root または data.url のどちらでも拾う
+  const rawUrl =
+    (parsed && (parsed.url || (parsed.data && parsed.data.url))) || null;
 
-    const rawUrl =
-      (parsed && (parsed.url || parsed.data?.url || parsed.notification?.data?.url)) ||
-      null;
+  const route = normalizeRoute(rawUrl);
+  const absUrl = toAbsoluteUrl(rawUrl || route);
 
-    const route = normalizeRoute(rawUrl);
-    const absUrl = toAbsoluteUrl(rawUrl || route);
+  const debugId =
+    (parsed && parsed.debugId) ||
+    `push_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
-    const debugId =
-      (parsed && (parsed.debugId || parsed.data?.debugId)) ||
-      `push_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+  const debugSuffix =
+    `\n[url=${rawUrl || ""}]` +
+    `\n[route=${route}]` +
+    `\n[debugId=${debugId}]`;
 
-    // 通知本文に“見える形”で埋め込む（ここが一番効く）
-    const debugSuffix = `\n[url=${rawUrl || ""}]\n[route=${route}]\n[debugId=${debugId}]`;
+  const options = {
+    body: bodyBase + debugSuffix,
 
-    const options = {
-      body: bodyBase + debugSuffix,
-      data: {
-        url: absUrl,      // 絶対URL
-        route,            // 正規化済みルート
-        rawUrl,           // payload 生値
-        debugId,
-        from: "push",
-      },
-      requireInteraction: true,
-      actions: [
-        { action: "open", title: "開く" },
-      ],
-    };
+    // ★ここが重要：クリック時に確実に参照できるよう data に入れる
+    data: { url: absUrl, route, rawUrl, debugId, ts: Date.now() },
 
-    try {
+    // ★macOSの通知UIで click がSWに来ない時の回避：actions を明示
+    actions: [
+      { action: "open", title: "開く" },
+      { action: "home", title: "ホーム" },
+    ],
+
+    // あるとデバッグが安定することが多い
+    tag: "carebridgehub-push",
+    renotify: false,
+
+    // 任意：すぐ消えるのが嫌なら true（好み）
+    // requireInteraction: true,
+  };
+
+  event.waitUntil(
+    (async () => {
       await self.registration.showNotification(title, options);
       console.log("[sw] showNotification done", { debugId, rawUrl, route, absUrl });
-    } catch (e) {
-      console.error("[sw] showNotification error", e);
-    }
-  })());
+    })()
+  );
 });
 
 self.addEventListener("notificationclick", (event) => {
-  event.waitUntil((async () => {
-    try {
-      const data = event.notification?.data || {};
-      console.log("[sw] notificationclick fired", {
-        action: event.action || "(body)",
-        data,
-      });
+  // ★まず最初に必ずログ（ここが出ない＝クリックがSWに来てない）
+  console.log("[sw] notificationclick fired", {
+    action: event.action || "(body)",
+    data: event.notification && event.notification.data,
+  });
 
-      event.notification?.close?.();
+  event.notification?.close?.();
 
-      // action があっても、基本は data.url を開く
-      const target = data.url || data.route || "/home";
-      await focusOrOpen(target);
-      console.log("[sw] notificationclick navigated", { target });
-    } catch (e) {
-      console.error("[sw] notificationclick error", e);
+  event.waitUntil(
+    (async () => {
+      const data = (event.notification && event.notification.data) || {};
+      let target = data.url || (self.location.origin + "/home");
+
+      if (event.action === "home") {
+        target = self.location.origin + "/home";
+      }
+      // action==="open" も body クリックも open 扱い
+
+      // ★まずは「確実に開く」ことを最優先（focus探索は後回し）
       try {
-        await focusOrOpen("/home");
-      } catch {}
-    }
-  })());
+        await self.clients.openWindow(target);
+        console.log("[sw] openWindow ok", { target });
+        return;
+      } catch (e) {
+        console.error("[sw] openWindow failed", e);
+      }
+
+      // fallback：既存タブがあればそれをフォーカス
+      try {
+        const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        for (const c of list) {
+          if ("focus" in c) {
+            await c.focus();
+            console.log("[sw] focus fallback ok");
+            return;
+          }
+        }
+      } catch (e) {
+        console.error("[sw] focus fallback failed", e);
+      }
+    })()
+  );
 });
 
 self.addEventListener("notificationclose", (event) => {
-  console.log("[sw] notificationclose", { data: event.notification?.data || null });
+  console.log("[sw] notificationclose", { data: event.notification && event.notification.data });
 });
