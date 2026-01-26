@@ -59,28 +59,21 @@ function pickUrlFromNotificationData(rawData) {
     (rawData && typeof rawData.route === "string" && rawData.route) ||
     "/home";
 
-  // ✅ data.url がフルURLのケースに対応（後方互換）
-  // - same-origin の場合だけ rawUrl を優先採用
-  // - normalizeRoute へ渡すのは pathname のみ（query/hash で /home に落ちるのを防ぐ）
+  // full URL
   if (typeof rawUrl === "string" && /^https?:\/\//.test(rawUrl)) {
     try {
       const u = new URL(rawUrl);
       const sameOrigin = u.origin === self.location.origin;
-
-      if (sameOrigin) {
-        const route = normalizeRoute(u.pathname);
-        const url = rawUrl; // フルURLはそのまま利用（search/hash含む）
-        return { rawUrl, route, url };
-      }
-    } catch {
-      // ignore
-    }
+      const rawRoute = sameOrigin ? `${u.pathname}${u.search}${u.hash}` : "/home";
+      const route = normalizeRoute(rawRoute);
+      const url = sameOrigin ? rawUrl : new URL(route, self.location.origin).toString();
+      return { rawUrl, route, url };
+    } catch {}
   }
 
-  // 従来: route として扱う（/home など）
+  // route
   const route = normalizeRoute(rawUrl);
   const url = new URL(route, self.location.origin).toString();
-
   return { rawUrl, route, url };
 }
 
@@ -104,7 +97,7 @@ async function focusOrOpen(url) {
       if (sameOriginClient.focus) await sameOriginClient.focus();
     } catch {}
 
-    // ① 可能ならnavigate（最強）
+    // ① 可能ならnavigate
     try {
       if (sameOriginClient.navigate) {
         await sameOriginClient.navigate(url);
@@ -112,10 +105,10 @@ async function focusOrOpen(url) {
         return true;
       }
     } catch {
-      // navigateがダメなら次へ
+      // ignore
     }
 
-    // ② navigateできない環境用：ページ側に遷移を依頼（受け口が必要）
+    // ② navigateできない環境用：ページ側に遷移を依頼
     try {
       sameOriginClient.postMessage({ type: "NAVIGATE", url });
       console.log("[sw] notificationclick postMessage sent", url);
@@ -184,48 +177,35 @@ self.addEventListener("push", (event) => {
       const title = (parsed && parsed.title) || "CareBridge Hub";
       const body = (parsed && parsed.body) || "";
 
-      const routeRaw =
-        (parsed && (parsed.route || parsed.url || parsed.path)) || "/home";
+      const routeRaw = (parsed && (parsed.route || parsed.url || parsed.path)) || "/home";
       const route = normalizeRoute(routeRaw);
       const url = new URL(route, self.location.origin).toString();
 
       void swLog("push", { raw, parsed, route, url });
 
-      // ✅クリック遷移の主キー：data.url を必ず入れる（フルURL）
+      // ✅クリック遷移の主キー：data.url を必ず入れる
+      const debugId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
       const data = {
         url,
-        route, // 互換（/home 等）
+        route, // 互換
         raw,
         parsed,
+        debugId,
       };
 
-      console.log("[sw] showNotification start. route=", route, "url=", url);
+      console.log("[sw] showNotification start. route=", route, "url=", url, "debugId=", debugId);
 
+      // ★ ここが今回の“本命修正”：
+      // まず「クリックがSWに届く」ことを最優先して通知optionsを極限までシンプルにする
       const options = {
-        body,
+        body: `${body || ""} [debugId:${debugId}]`,
         data,
-        tag: `cbh-${Date.now()}`,
-        renotify: true,
-        requireInteraction: true,
-        actions: [
-          { action: "open", title: "開く" },
-          { action: "dismiss", title: "閉じる" },
-        ],
+        // tag/renotify/requireInteraction/actions は一旦外す（ここが原因でclickが死ぬ環境がある）
       };
-
-      const debugId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
-      options.data = { ...(options.data || {}), debugId };
-      options.tag = options.tag || `cbh_${debugId}`;
-      options.body = `${options.body || ""} [debugId:${debugId}]`;
-      console.log("[sw] push debugId", debugId, {
-        data: options.data,
-        tag: options.tag,
-      });
-      options.requireInteraction = true;
 
       await self.registration.showNotification(title, options);
 
-      console.log("[sw] showNotification done. route=", route, "url=", url);
+      console.log("[sw] showNotification done. route=", route, "url=", url, "debugId=", debugId);
     })()
   );
 });
@@ -233,16 +213,18 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   console.log("[sw] notificationclick fired (debug)", {
     debugId: event.notification?.data?.debugId,
+    action: event.action,
     data: event.notification?.data,
     tag: event.notification?.tag,
   });
+
   event.notification?.close();
 
   event.waitUntil(
     (async () => {
       try {
         const action = event.action || "(body)";
-        if (action === "dismiss") return;
+        // ※ actions を外してるので通常ここは (body) になります
 
         const rawData = event.notification?.data ?? null;
         const { rawUrl, route, url } = pickUrlFromNotificationData(rawData);
