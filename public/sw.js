@@ -29,11 +29,9 @@ function toAbsoluteUrl(rawOrRoute) {
   }
 }
 
-// ★検証用フラグ：まずは actions を切る（macOS/Chromeでクリック配送が変になる疑い潰し）
-const ENABLE_ACTIONS = false;
-
-// ★検証用：通知を残す（これで getNotifications で掴める/通知センターに残る想定）
-const REQUIRE_INTERACTION = true;
+function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms));
+}
 
 self.addEventListener("install", (event) => {
   console.log("[sw] install", { scope: self.registration.scope, origin: self.location.origin });
@@ -65,6 +63,7 @@ self.addEventListener("push", (event) => {
     (parsed && parsed.debugId) ||
     `push_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
+  // ★検証しやすいように tag は一意（今まで通り）
   const tag = `carebridgehub-push-${debugId}`;
 
   const debugSuffix =
@@ -73,51 +72,55 @@ self.addEventListener("push", (event) => {
     `\n[abs=${absUrl}]` +
     `\n[debugId=${debugId}]`;
 
-  /** @type {NotificationOptions} */
   const options = {
     body: bodyBase + debugSuffix,
 
-    // クリック時に拾うためのデータ
     data: { url: absUrl, route, rawUrl, debugId, ts: Date.now() },
 
-    // ★通知を残して挙動を見る（macOSのバナー即消え対策）
-    requireInteraction: REQUIRE_INTERACTION,
+    actions: [{ action: "open", title: "開く" }],
 
-    // 同一タグで上書きしたくないのでユニークに
     tag,
-
     renotify: false,
-    silent: false,
-  };
 
-  if (ENABLE_ACTIONS) {
-    options.actions = [{ action: "open", title: "開く" }];
-  }
+    // ★これが超重要：通知を残してクリック検証を安定させる
+    requireInteraction: true,
+  };
 
   event.waitUntil(
     (async () => {
       try {
         await self.registration.showNotification(title, options);
         console.log("[sw] showNotification OK", { debugId, rawUrl, route, absUrl, tag });
-
-        // ★重要：通知がSW視点で存在するか確認（tag指定なし/あり両方）
-        try {
-          const all = await self.registration.getNotifications();
-          const tagged = await self.registration.getNotifications({ tag });
-          console.log("[sw] getNotifications ALL", { debugId, count: all.length });
-          console.log("[sw] getNotifications TAG", { debugId, tag, count: tagged.length });
-        } catch (e) {
-          console.error("[sw] getNotifications failed", e, { debugId, tag });
-        }
       } catch (e) {
         console.error("[sw] showNotification FAILED", e, { debugId, rawUrl, route, absUrl, tag });
+        return;
+      }
+
+      // ★タイミング問題を潰す：少し待ってから取得
+      await sleep(300);
+
+      try {
+        const all = await self.registration.getNotifications();
+        console.log("[sw] getNotifications ALL", {
+          debugId,
+          count: all.length,
+          tags: all.map((n) => n.tag),
+        });
+      } catch (e) {
+        console.error("[sw] getNotifications ALL failed", e, { debugId });
+      }
+
+      try {
+        const byTag = await self.registration.getNotifications({ tag });
+        console.log("[sw] getNotifications TAG", { debugId, tag, count: byTag.length });
+      } catch (e) {
+        console.error("[sw] getNotifications TAG failed", e, { debugId, tag });
       }
     })()
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
-  // これが出ない＝クリックがSWに届いてない
   console.log("[sw] notificationclick fired", {
     action: event.action || "(body)",
     data: event.notification && event.notification.data,
@@ -130,40 +133,40 @@ self.addEventListener("notificationclick", (event) => {
     (async () => {
       const data = (event.notification && event.notification.data) || {};
       const target = data.url || (self.location.origin + "/home");
+      const origin = self.location.origin;
 
-      // 現在のクライアント一覧をまずログ（診断用）
+      // 1) まず既存タブがあればそれを使う（macOS/Chromeで安定しやすい）
       try {
         const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-        console.log("[sw] clients.matchAll", {
-          count: list.length,
-          urls: list.map((c) => c.url),
-        });
+        console.log("[sw] clients.matchAll", { count: list.length, urls: list.map((c) => c.url) });
+
+        // 同一 origin のタブを優先
+        const same = list.find((c) => typeof c.url === "string" && c.url.startsWith(origin));
+        if (same) {
+          try {
+            if ("focus" in same) await same.focus();
+            if ("navigate" in same) {
+              await same.navigate(target);
+              console.log("[sw] navigate ok", { target, clientUrl: same.url });
+              return;
+            }
+            console.log("[sw] focus ok (no navigate available)", { clientUrl: same.url });
+            return;
+          } catch (e) {
+            console.error("[sw] focus/navigate failed", e, { target, clientUrl: same.url });
+          }
+        }
       } catch (e) {
         console.error("[sw] clients.matchAll failed", e);
       }
 
-      // まず openWindow（これが通れば勝ち）
+      // 2) 既存が無ければ openWindow
       try {
         const win = await self.clients.openWindow(target);
         console.log("[sw] openWindow ok", { target, win: !!win });
         return;
       } catch (e) {
         console.error("[sw] openWindow failed", e, { target });
-      }
-
-      // fallback：既存タブへフォーカス
-      try {
-        const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-        for (const c of list) {
-          if ("focus" in c) {
-            await c.focus();
-            console.log("[sw] focus fallback ok", { clientUrl: c.url });
-            return;
-          }
-        }
-        console.warn("[sw] focus fallback: no clients");
-      } catch (e) {
-        console.error("[sw] focus fallback failed", e);
       }
     })()
   );
