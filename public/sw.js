@@ -29,6 +29,12 @@ function toAbsoluteUrl(rawOrRoute) {
   }
 }
 
+// ★検証用フラグ：まずは actions を切る（macOS/Chromeでクリック配送が変になる疑い潰し）
+const ENABLE_ACTIONS = false;
+
+// ★検証用：通知を残す（これで getNotifications で掴める/通知センターに残る想定）
+const REQUIRE_INTERACTION = true;
+
 self.addEventListener("install", (event) => {
   console.log("[sw] install", { scope: self.registration.scope, origin: self.location.origin });
   self.skipWaiting();
@@ -59,31 +65,34 @@ self.addEventListener("push", (event) => {
     (parsed && parsed.debugId) ||
     `push_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
+  const tag = `carebridgehub-push-${debugId}`;
+
   const debugSuffix =
     `\n[url=${rawUrl || ""}]` +
     `\n[route=${route}]` +
     `\n[abs=${absUrl}]` +
     `\n[debugId=${debugId}]`;
 
-  // ★ここが重要：固定tagだと「上書き」されて“出てないように見える”
-  // 検証中はユニークtagで必ず新規通知にする
-  const tag = `carebridgehub-push-${debugId}`;
-
+  /** @type {NotificationOptions} */
   const options = {
     body: bodyBase + debugSuffix,
 
-    // クリック時に確実に拾う
+    // クリック時に拾うためのデータ
     data: { url: absUrl, route, rawUrl, debugId, ts: Date.now() },
 
-    // アクション（ボタン）
-    actions: [{ action: "open", title: "開く" }],
+    // ★通知を残して挙動を見る（macOSのバナー即消え対策）
+    requireInteraction: REQUIRE_INTERACTION,
 
+    // 同一タグで上書きしたくないのでユニークに
     tag,
-    renotify: true,
 
-    // 検証しやすくする（勝手に消えにくい）
-    requireInteraction: true,
+    renotify: false,
+    silent: false,
   };
+
+  if (ENABLE_ACTIONS) {
+    options.actions = [{ action: "open", title: "開く" }];
+  }
 
   event.waitUntil(
     (async () => {
@@ -91,33 +100,28 @@ self.addEventListener("push", (event) => {
         await self.registration.showNotification(title, options);
         console.log("[sw] showNotification OK", { debugId, rawUrl, route, absUrl, tag });
 
-        // 「本当に通知が作られたか」をSW側で確定する
+        // ★重要：通知がSW視点で存在するか確認（tag指定なし/あり両方）
         try {
-          const list = await self.registration.getNotifications({ tag });
-          console.log("[sw] getNotifications", { debugId, tag, count: list.length });
+          const all = await self.registration.getNotifications();
+          const tagged = await self.registration.getNotifications({ tag });
+          console.log("[sw] getNotifications ALL", { debugId, count: all.length });
+          console.log("[sw] getNotifications TAG", { debugId, tag, count: tagged.length });
         } catch (e) {
-          console.warn("[sw] getNotifications failed", { debugId, tag, name: e?.name, message: e?.message });
+          console.error("[sw] getNotifications failed", e, { debugId, tag });
         }
       } catch (e) {
-        console.error("[sw] showNotification FAILED", {
-          debugId,
-          rawUrl,
-          route,
-          absUrl,
-          tag,
-          name: e?.name,
-          message: e?.message,
-          stack: e?.stack,
-        });
+        console.error("[sw] showNotification FAILED", e, { debugId, rawUrl, route, absUrl, tag });
       }
     })()
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
+  // これが出ない＝クリックがSWに届いてない
   console.log("[sw] notificationclick fired", {
     action: event.action || "(body)",
     data: event.notification && event.notification.data,
+    tag: event.notification && event.notification.tag,
   });
 
   event.notification?.close?.();
@@ -127,16 +131,27 @@ self.addEventListener("notificationclick", (event) => {
       const data = (event.notification && event.notification.data) || {};
       const target = data.url || (self.location.origin + "/home");
 
-      // ★最優先：openWindow を最初の await
+      // 現在のクライアント一覧をまずログ（診断用）
+      try {
+        const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+        console.log("[sw] clients.matchAll", {
+          count: list.length,
+          urls: list.map((c) => c.url),
+        });
+      } catch (e) {
+        console.error("[sw] clients.matchAll failed", e);
+      }
+
+      // まず openWindow（これが通れば勝ち）
       try {
         const win = await self.clients.openWindow(target);
         console.log("[sw] openWindow ok", { target, win: !!win });
         return;
       } catch (e) {
-        console.error("[sw] openWindow failed", { target, name: e?.name, message: e?.message });
+        console.error("[sw] openWindow failed", e, { target });
       }
 
-      // fallback: 既存タブへフォーカス
+      // fallback：既存タブへフォーカス
       try {
         const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
         for (const c of list) {
@@ -148,12 +163,15 @@ self.addEventListener("notificationclick", (event) => {
         }
         console.warn("[sw] focus fallback: no clients");
       } catch (e) {
-        console.error("[sw] focus fallback failed", { name: e?.name, message: e?.message });
+        console.error("[sw] focus fallback failed", e);
       }
     })()
   );
 });
 
 self.addEventListener("notificationclose", (event) => {
-  console.log("[sw] notificationclose", { data: event.notification && event.notification.data });
+  console.log("[sw] notificationclose", {
+    tag: event.notification && event.notification.tag,
+    data: event.notification && event.notification.data,
+  });
 });
