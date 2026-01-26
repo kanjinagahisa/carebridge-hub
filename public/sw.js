@@ -30,65 +30,75 @@ function toAbsoluteUrl(rawOrRoute) {
 }
 
 self.addEventListener("install", (event) => {
-  console.log("[sw] install", { scope: self.registration.scope, origin: self.location.origin });
+  console.log("[sw] install", {
+    scope: self.registration.scope,
+    origin: self.location.origin,
+  });
   self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
-  console.log("[sw] activate", { scope: self.registration.scope, origin: self.location.origin });
+  console.log("[sw] activate", {
+    scope: self.registration.scope,
+    origin: self.location.origin,
+  });
   event.waitUntil(self.clients.claim());
 });
 
 self.addEventListener("push", (event) => {
-  console.log("[sw] push event fired");
-
-  const rawText = event.data ? event.data.text() : "";
-  const parsed = safeJsonParse(rawText);
-
-  console.log("[sw] push payload raw:", rawText || "(no payload)");
-  if (parsed) console.log("[sw] push payload parsed:", parsed);
-
-  const title = (parsed && parsed.title) || "CareBridge Hub";
-  const bodyBase = (parsed && parsed.body) || "新しいお知らせがあります。";
-
-  // url は root または data.url のどちらでも拾う
-  const rawUrl =
-    (parsed && (parsed.url || (parsed.data && parsed.data.url))) || null;
-
-  const route = normalizeRoute(rawUrl);
-  const absUrl = toAbsoluteUrl(rawUrl || route);
-
-  const debugId =
-    (parsed && parsed.debugId) ||
-    `push_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-
-  const debugSuffix =
-    `\n[url=${rawUrl || ""}]` +
-    `\n[route=${route}]` +
-    `\n[debugId=${debugId}]`;
-
-  const options = {
-    body: bodyBase + debugSuffix,
-
-    // ★ここが重要：クリック時に確実に参照できるよう data に入れる
-    data: { url: absUrl, route, rawUrl, debugId, ts: Date.now() },
-
-    // ★macOSの通知UIで click がSWに来ない時の回避：actions を明示
-    actions: [
-      { action: "open", title: "開く" },
-      { action: "home", title: "ホーム" },
-    ],
-
-    // あるとデバッグが安定することが多い
-    tag: "carebridgehub-push",
-    renotify: false,
-
-    // 任意：すぐ消えるのが嫌なら true（好み）
-    // requireInteraction: true,
-  };
-
   event.waitUntil(
     (async () => {
+      console.log("[sw] push event fired");
+
+      const rawText = event.data ? await event.data.text() : "";
+      const parsed = safeJsonParse(rawText);
+
+      console.log("[sw] push payload raw:", rawText || "(no payload)");
+      if (parsed) console.log("[sw] push payload parsed:", parsed);
+
+      const title = (parsed && parsed.title) || "CareBridge Hub";
+      const bodyBase = (parsed && parsed.body) || "新しいお知らせがあります。";
+
+      // url は root または data.url のどちらでも拾う
+      const rawUrl =
+        (parsed && (parsed.url || (parsed.data && parsed.data.url))) || null;
+
+      const route = normalizeRoute(rawUrl);
+      const absUrl = toAbsoluteUrl(rawUrl || route);
+
+      const debugId =
+        (parsed && parsed.debugId) ||
+        `push_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
+      const debugSuffix =
+        `\n[url=${rawUrl || ""}]` +
+        `\n[route=${route}]` +
+        `\n[debugId=${debugId}]`;
+
+      const options = {
+        body: bodyBase + debugSuffix,
+
+        // ★クリック時に確実に使うデータ（absUrl と route を両方保持）
+        data: {
+          absUrl,          // 完全URL
+          url: route,      // ルート（念のため）
+          route,
+          rawUrl,
+          debugId,
+          ts: Date.now(),
+        },
+
+        // ★macOSで body クリックが来ない/不安定な時の回避策として actions も用意
+        actions: [
+          { action: "open", title: "開く" },
+          { action: "home", title: "ホーム" },
+        ],
+
+        tag: "carebridgehub-push",
+        renotify: false,
+        // requireInteraction: true, // 必要ならON
+      };
+
       await self.registration.showNotification(title, options);
       console.log("[sw] showNotification done", { debugId, rawUrl, route, absUrl });
     })()
@@ -96,45 +106,74 @@ self.addEventListener("push", (event) => {
 });
 
 self.addEventListener("notificationclick", (event) => {
-  // ★まず最初に必ずログ（ここが出ない＝クリックがSWに来てない）
-  console.log("[sw] notificationclick fired", {
-    action: event.action || "(body)",
-    data: event.notification && event.notification.data,
-  });
-
+  // ✅ まず close（OS側で通知が残ると挙動が変なことがある）
   event.notification?.close?.();
 
   event.waitUntil(
     (async () => {
-      const data = (event.notification && event.notification.data) || {};
-      let target = data.url || (self.location.origin + "/home");
+      const data = event.notification?.data || {};
+      console.log("[sw] notificationclick fired", { data, action: event.action });
 
-      if (event.action === "home") {
-        target = self.location.origin + "/home";
-      }
-      // action==="open" も body クリックも open 扱い
+      // actionごとに遷移先を決める
+      let target = data.absUrl || toAbsoluteUrl(data.url || "/home");
+      if (event.action === "home") target = self.location.origin + "/home";
+      // open / body クリックは target のまま
 
-      // ★まずは「確実に開く」ことを最優先（focus探索は後回し）
+      // ① まず「既存タブ」を優先して navigate + focus（これが一番確実）
       try {
-        await self.clients.openWindow(target);
-        console.log("[sw] openWindow ok", { target });
+        const list = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+
+        // 同一オリジンのタブを優先
+        const sameOriginClient = list.find((c) => {
+          try {
+            return typeof c.url === "string" && c.url.startsWith(self.location.origin);
+          } catch {
+            return false;
+          }
+        });
+
+        if (sameOriginClient) {
+          try {
+            if ("navigate" in sameOriginClient) {
+              await sameOriginClient.navigate(target);
+              console.log("[sw] navigate ok", { target });
+            }
+          } catch (e) {
+            console.error("[sw] navigate failed", e);
+          }
+
+          try {
+            if ("focus" in sameOriginClient) {
+              await sameOriginClient.focus();
+              console.log("[sw] focus ok");
+              return;
+            }
+          } catch (e) {
+            console.error("[sw] focus failed", e);
+          }
+        }
+      } catch (e) {
+        console.error("[sw] matchAll failed", e);
+      }
+
+      // ② 既存がダメなら openWindow（新規タブ/ウィンドウ）
+      try {
+        const win = await self.clients.openWindow(target);
+        console.log("[sw] openWindow ok", { target, win: !!win });
         return;
       } catch (e) {
         console.error("[sw] openWindow failed", e);
       }
 
-      // fallback：既存タブがあればそれをフォーカス
+      // ③ 最後の保険：開けないならホームへ
       try {
-        const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
-        for (const c of list) {
-          if ("focus" in c) {
-            await c.focus();
-            console.log("[sw] focus fallback ok");
-            return;
-          }
-        }
+        const fallback = await self.clients.openWindow(self.location.origin + "/home");
+        console.log("[sw] openWindow fallback ok", { fallback: !!fallback });
       } catch (e) {
-        console.error("[sw] focus fallback failed", e);
+        console.error("[sw] openWindow fallback failed", e);
       }
     })()
   );
