@@ -2,7 +2,7 @@
 
 // NOTE:
 // - swLog は “失敗しても本筋に影響させない” ため、基本は fire-and-forget（awaitしない）にしています。
-// - install/activate/push/click などの waitUntil では、必要な処理（showNotification / openWindow 等）だけを待ちます。
+// - install/activate/push/click/close などの waitUntil では、必要な処理（showNotification / openWindow 等）だけを待ちます。
 
 const SW_FILE = "public/sw.js";
 
@@ -181,10 +181,9 @@ self.addEventListener("push", (event) => {
       const route = normalizeRoute(routeRaw);
       const url = new URL(route, self.location.origin).toString();
 
-      void swLog("push", { raw, parsed, route, url });
-
       // ✅クリック遷移の主キー：data.url を必ず入れる
       const debugId = `${Date.now()}_${Math.random().toString(16).slice(2)}`;
+
       const data = {
         url,
         route, // 互換
@@ -193,17 +192,24 @@ self.addEventListener("push", (event) => {
         debugId,
       };
 
+      void swLog("push", { raw, parsed, route, url, debugId });
+
       console.log("[sw] showNotification start. route=", route, "url=", url, "debugId=", debugId);
 
-      // ★ クリック判定しやすい通知（requireInteraction + data + actions + tag）
-      // - 本文クリック/ボタンクリック どちらでも notificationclick を拾えるようにする
-      // - tag に debugId を入れて追跡できるようにする
+      // ✅クリック判定しやすい通知（requireInteraction + data + actions）
+      // - macOSだと actions が「ボタン」ではなく通知の「オプション」に吸収されることがあります
+      // - それでも event.action が取れる環境では取れます（取れない環境でも本文クリックは (body) で来ます）
       const options = {
         body: `${body || ""} [debugId:${debugId}]`,
-        data, // ★ clickで開く先は data.url
-        requireInteraction: true, // ★ 勝手に消えない（判定しやすい）
-        actions: [{ action: "open", title: "開く" }], // ★ ボタンでも click を試せる
-        tag: `dbg-${debugId}`, // ★ どの通知か追える
+        data,
+        requireInteraction: true,
+
+        // actions は “クリック判定しやすくする” ために付与
+        // ※環境によっては表示/挙動が制限されます
+        actions: [
+          { action: "open", title: "開く" },
+          { action: "close", title: "閉じる" },
+        ],
       };
 
       await self.registration.showNotification(title, options);
@@ -213,31 +219,27 @@ self.addEventListener("push", (event) => {
   );
 });
 
-// ★ 追加：closeも拾う（「クリックしたつもり」がclose扱いの判定）
+// ✅ close 判定ログ（最短）
 self.addEventListener("notificationclose", (event) => {
-  console.log("[sw] notificationclose fired", {
-    debugId: event.notification?.data?.debugId,
-    data: event.notification?.data,
-    tag: event.notification?.tag,
-  });
+  const debugId = event.notification?.data?.debugId;
+  const tag = event.notification?.tag;
+  const data = event.notification?.data;
 
-  void swLog("notificationclose", {
-    debugId: event.notification?.data?.debugId,
-    data: event.notification?.data,
-    tag: event.notification?.tag,
-  });
+  console.log("[sw] notificationclose fired", { debugId, tag, data });
+
+  // close は待たなくて良い（ログだけ）
+  void swLog("notificationclose", { debugId, tag, data });
 });
 
-// ★ 修正：clickは必ず waitUntil で延命する（寿命切れ対策）
+// ✅ click 判定ログ（最短）
 self.addEventListener("notificationclick", (event) => {
+  // まず「同期ログ」を必ず出す（waitUntilの外）
   console.log("[sw] notificationclick fired (sync)", {
     debugId: event.notification?.data?.debugId,
-    action: event.action,
-    data: event.notification?.data,
+    action: event.action || "(body)",
     tag: event.notification?.tag,
+    data: event.notification?.data,
   });
-
-  event.notification?.close();
 
   event.waitUntil(
     (async () => {
@@ -261,6 +263,19 @@ self.addEventListener("notificationclick", (event) => {
           url,
           rawData,
         });
+
+        // close アクションは「閉じるだけ」にする
+        if (action === "close") {
+          try {
+            event.notification?.close();
+          } catch {}
+          return;
+        }
+
+        // open / body click は遷移
+        try {
+          event.notification?.close();
+        } catch {}
 
         await focusOrOpen(url);
       } catch (e) {
