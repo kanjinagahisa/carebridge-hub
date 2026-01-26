@@ -195,12 +195,15 @@ self.addEventListener("push", (event) => {
 
       console.log("[sw] showNotification start. route=", route, "url=", url, "debugId=", debugId);
 
-      // ★ ここが今回の“本命修正”：
-      // まず「クリックがSWに届く」ことを最優先して通知optionsを極限までシンプルにする
+      // ★ クリック判定しやすい通知（requireInteraction + data + actions + tag）
+      // - 本文クリック/ボタンクリック どちらでも notificationclick を拾えるようにする
+      // - tag に debugId を入れて追跡できるようにする
       const options = {
         body: `${body || ""} [debugId:${debugId}]`,
-        data,
-        // tag/renotify/requireInteraction/actions は一旦外す（ここが原因でclickが死ぬ環境がある）
+        data, // ★ clickで開く先は data.url
+        requireInteraction: true, // ★ 勝手に消えない（判定しやすい）
+        actions: [{ action: "open", title: "開く" }], // ★ ボタンでも click を試せる
+        tag: `dbg-${debugId}`, // ★ どの通知か追える
       };
 
       await self.registration.showNotification(title, options);
@@ -210,8 +213,24 @@ self.addEventListener("push", (event) => {
   );
 });
 
+// ★ 追加：closeも拾う（「クリックしたつもり」がclose扱いの判定）
+self.addEventListener("notificationclose", (event) => {
+  console.log("[sw] notificationclose fired", {
+    debugId: event.notification?.data?.debugId,
+    data: event.notification?.data,
+    tag: event.notification?.tag,
+  });
+
+  void swLog("notificationclose", {
+    debugId: event.notification?.data?.debugId,
+    data: event.notification?.data,
+    tag: event.notification?.tag,
+  });
+});
+
+// ★ 修正：clickは必ず waitUntil で延命する（寿命切れ対策）
 self.addEventListener("notificationclick", (event) => {
-  console.log("[sw] notificationclick fired (debug)", {
+  console.log("[sw] notificationclick fired (sync)", {
     debugId: event.notification?.data?.debugId,
     action: event.action,
     data: event.notification?.data,
@@ -224,8 +243,6 @@ self.addEventListener("notificationclick", (event) => {
     (async () => {
       try {
         const action = event.action || "(body)";
-        // ※ actions を外してるので通常ここは (body) になります
-
         const rawData = event.notification?.data ?? null;
         const { rawUrl, route, url } = pickUrlFromNotificationData(rawData);
 
