@@ -65,29 +65,56 @@ self.addEventListener("push", (event) => {
     `\n[abs=${absUrl}]` +
     `\n[debugId=${debugId}]`;
 
+  // ★ここが重要：固定tagだと「上書き」されて“出てないように見える”
+  // 検証中はユニークtagで必ず新規通知にする
+  const tag = `carebridgehub-push-${debugId}`;
+
   const options = {
     body: bodyBase + debugSuffix,
 
     // クリック時に確実に拾う
     data: { url: absUrl, route, rawUrl, debugId, ts: Date.now() },
 
-    // macOS/Chromeで挙動が変わることがあるので明示（bodyクリックでも動く）
+    // アクション（ボタン）
     actions: [{ action: "open", title: "開く" }],
 
-    tag: "carebridgehub-push",
-    renotify: false,
+    tag,
+    renotify: true,
+
+    // 検証しやすくする（勝手に消えにくい）
+    requireInteraction: true,
   };
 
   event.waitUntil(
     (async () => {
-      await self.registration.showNotification(title, options);
-      console.log("[sw] showNotification done", { debugId, rawUrl, route, absUrl });
+      try {
+        await self.registration.showNotification(title, options);
+        console.log("[sw] showNotification OK", { debugId, rawUrl, route, absUrl, tag });
+
+        // 「本当に通知が作られたか」をSW側で確定する
+        try {
+          const list = await self.registration.getNotifications({ tag });
+          console.log("[sw] getNotifications", { debugId, tag, count: list.length });
+        } catch (e) {
+          console.warn("[sw] getNotifications failed", { debugId, tag, name: e?.name, message: e?.message });
+        }
+      } catch (e) {
+        console.error("[sw] showNotification FAILED", {
+          debugId,
+          rawUrl,
+          route,
+          absUrl,
+          tag,
+          name: e?.name,
+          message: e?.message,
+          stack: e?.stack,
+        });
+      }
     })()
   );
 });
 
 self.addEventListener("notificationclick", (event) => {
-  // まずログ。これが出ない＝クリックがSWに届いてない
   console.log("[sw] notificationclick fired", {
     action: event.action || "(body)",
     data: event.notification && event.notification.data,
@@ -95,21 +122,21 @@ self.addEventListener("notificationclick", (event) => {
 
   event.notification?.close?.();
 
-  // ★最重要：openWindow を「最初の await」にする（user-gestureを消さない）
   event.waitUntil(
     (async () => {
       const data = (event.notification && event.notification.data) || {};
       const target = data.url || (self.location.origin + "/home");
 
+      // ★最優先：openWindow を最初の await
       try {
         const win = await self.clients.openWindow(target);
         console.log("[sw] openWindow ok", { target, win: !!win });
         return;
       } catch (e) {
-        console.error("[sw] openWindow failed", e, { target });
+        console.error("[sw] openWindow failed", { target, name: e?.name, message: e?.message });
       }
 
-      // openWindow が環境的にダメな場合の fallback（既存タブへフォーカス）
+      // fallback: 既存タブへフォーカス
       try {
         const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
         for (const c of list) {
@@ -121,7 +148,7 @@ self.addEventListener("notificationclick", (event) => {
         }
         console.warn("[sw] focus fallback: no clients");
       } catch (e) {
-        console.error("[sw] focus fallback failed", e);
+        console.error("[sw] focus fallback failed", { name: e?.name, message: e?.message });
       }
     })()
   );
