@@ -35,15 +35,30 @@ async function getUserIdFromRequest(req: Request): Promise<string | null> {
 
 async function getUserIdFromCookies(): Promise<string | null> {
   try {
+    const cookieStore = cookies();
+
     const supabase = createServerClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
       {
         cookies: {
-          getAll() {
-            return cookies().getAll();
+          get(name: string) {
+            return cookieStore.get(name)?.value;
           },
-          setAll() {},
+          set(name: string, value: string, options: any) {
+            try {
+              cookieStore.set({ name, value, ...options });
+            } catch {
+              // ルートハンドラ/環境によっては set が制限されるので握りつぶす
+            }
+          },
+          remove(name: string, options: any) {
+            try {
+              cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+            } catch {
+              // 同上
+            }
+          },
         },
       }
     );
