@@ -1,129 +1,130 @@
-// app/api/users/set-current-facility/route.ts
-import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
-
-export const runtime = "nodejs";
-
-// ✅ 更新/所属チェック用（Service Role）
-function getAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-  if (!url || !serviceRole) throw new Error("Missing SUPABASE envs");
-  return createClient(url, serviceRole, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-// ✅ 認証用（Anon + Cookie）
-function getAuthClient(cookieHeader: string) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  if (!url || !anonKey) throw new Error("Missing SUPABASE envs");
-  return createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false },
-    global: {
-      headers: {
-        // SupabaseがCookieからセッションを復元できるようにする
-        Cookie: cookieHeader,
-      },
-    },
-  });
-}
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+import { createServerClient } from '@supabase/ssr';
+import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
   try {
-    // 1) body
-    const { userId, facilityId } = (await req.json()) as {
-      userId?: string;
-      facilityId?: string;
-    };
+    /* =========================
+       1. Supabase clients
+    ========================= */
+
+    // Cookieベース（ログインユーザー判定用）
+    const cookieStore = cookies();
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookies: {
+          get(name: string) {
+            return cookieStore.get(name)?.value;
+          },
+        },
+      }
+    );
+
+    // Service Role（更新・所属チェック用）
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+
+    /* =========================
+       2. ログインユーザー確認
+    ========================= */
+
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { ok: false, error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
+
+    /* =========================
+       3. リクエストボディ検証
+    ========================= */
+
+    const body = await req.json();
+    const { userId, facilityId } = body ?? {};
 
     if (!userId || !facilityId) {
       return NextResponse.json(
-        { ok: false, error: "userId and facilityId are required" },
+        { ok: false, error: 'userId and facilityId are required' },
         { status: 400 }
       );
     }
 
-    // 2) Cookieから「このリクエストのログインユーザー」を特定
-    const cookieStore = await cookies();
-    const cookieHeader = cookieStore
-      .getAll()
-      .map((c) => `${c.name}=${c.value}`)
-      .join("; ");
+    /* =========================
+       4. userId なりすまし防止
+    ========================= */
 
-    if (!cookieHeader) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized: no cookies" },
-        { status: 401 }
-      );
-    }
-
-    const authClient = getAuthClient(cookieHeader);
-
-    const {
-      data: { user },
-      error: authErr,
-    } = await authClient.auth.getUser();
-
-    if (authErr || !user) {
-      return NextResponse.json(
-        { ok: false, error: "Unauthorized" },
-        { status: 401 }
-      );
-    }
-
-    // 3) user.id と userId が一致しないなら拒否
     if (user.id !== userId) {
       return NextResponse.json(
-        { ok: false, error: "Forbidden" },
+        { ok: false, error: 'Forbidden (user mismatch)' },
         { status: 403 }
       );
     }
 
-    // ✅ 4) facilityId が「このユーザーの所属施設」かチェック（なりすまし対策）
-    const admin = getAdmin();
+    /* =========================
+       5. 施設所属チェック
+       user_facility_roles
+    ========================= */
 
-    const { data: roleRow, error: roleErr } = await admin
-      .from("user_facility_roles")
-      .select("facility_id")
-      .eq("user_id", user.id)
-      .eq("facility_id", facilityId)
-      .eq("deleted", false)
+    const { data: membership, error: membershipError } = await admin
+      .from('user_facility_roles')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('facility_id', facilityId)
+      .eq('deleted', false)
       .maybeSingle();
 
-    if (roleErr) {
+    if (membershipError) {
+      console.error('[membershipError]', membershipError);
       return NextResponse.json(
-        { ok: false, error: roleErr.message },
+        { ok: false, error: 'Failed to verify facility membership' },
         { status: 500 }
       );
     }
 
-    if (!roleRow) {
+    if (!membership) {
       return NextResponse.json(
-        { ok: false, error: "Forbidden: facility not in your roles" },
+        { ok: false, error: 'Forbidden (not a member of facility)' },
         { status: 403 }
       );
     }
 
-    // 5) OKなら Service Role で users.current_facility_id を更新
-    const { error } = await admin
-      .from("users")
-      .update({ current_facility_id: facilityId })
-      .eq("id", userId);
+    /* =========================
+       6. current_facility_id 更新
+    ========================= */
 
-    if (error) {
+    const { error: updateError } = await admin
+      .from('users')
+      .update({ current_facility_id: facilityId })
+      .eq('id', user.id);
+
+    if (updateError) {
+      console.error('[updateError]', updateError);
       return NextResponse.json(
-        { ok: false, error: error.message },
+        { ok: false, error: updateError.message },
         { status: 500 }
       );
     }
+
+    /* =========================
+       7. 成功
+    ========================= */
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
+    console.error('[set-current-facility fatal]', e);
     return NextResponse.json(
-      { ok: false, error: e?.message ?? "unknown error" },
+      { ok: false, error: e?.message ?? 'Unknown error' },
       { status: 500 }
     );
   }
