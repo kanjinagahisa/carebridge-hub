@@ -161,6 +161,35 @@ export default async function HomePage({
       redirect('/setup/choose')
     }
 
+    // ✅ 保険A：current_facility_id が空/ズレていても home 初回ロードで自動復旧
+    // Pushトグルは users.current_facility_id を見るため、ここで確実に整える
+    try {
+      const { data: userRow, error: userRowError } = await adminSupabase
+        .from('users')
+        .select('current_facility_id')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (userRowError) {
+        console.warn('[HomePage] Failed to fetch users.current_facility_id:', userRowError)
+      } else {
+        const current = userRow?.current_facility_id ?? null
+        if (current !== selectedFacilityId) {
+          const { error: updErr } = await adminSupabase
+            .from('users')
+            .update({ current_facility_id: selectedFacilityId })
+            .eq('id', user.id)
+          if (updErr) {
+            console.warn('[HomePage] Failed to update current_facility_id:', updErr)
+          } else {
+            console.log('[HomePage] current_facility_id restored:', selectedFacilityId)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[HomePage] current_facility restore exception:', e)
+    }
+
     // 自施設の全グループを取得（最新の施設のグループのみ）
     console.log('[HomePage] Fetching groups for latest facility:', selectedFacilityId)
     const { data: groups, error: groupsError } = await adminSupabase

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { urlBase64ToUint8Array } from '@/lib/webpush/vapid'
 import { createClient } from '@/lib/supabase/client'
 
@@ -9,6 +10,7 @@ interface PushNotificationToggleProps {
 }
 
 export default function PushNotificationToggle({ className }: PushNotificationToggleProps) {
+  const router = useRouter()
   const [isSubscribed, setIsSubscribed] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -102,7 +104,12 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
 
       const facilityId = profile?.current_facility_id
       if (!facilityId) {
-        setMessage({ type: 'error', text: '施設が未選択です。施設を選択してから再度お試しください。' })
+        setMessage({
+          type: 'error',
+          text: '施設が未選択です。ホームで自動復旧を試します（数秒後にもう一度ONをお試しください）。'
+        })
+        // home側の自動復旧（保険A）を発動させる
+        router.refresh()
         setIsLoading(false)
         return
       }

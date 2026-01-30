@@ -120,6 +120,21 @@ export default function SetupCreatePage() {
         return
       }
 
+      // ✅ 施設作成に成功したら「current_facility_id」を確定させる（Service Role API経由）
+      try {
+        const res = await fetch('/api/users/set-current-facility', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: user.id, facilityId: facility.id }),
+        })
+        const json = await res.json().catch(() => null)
+        if (!res.ok || !json?.ok) {
+          console.warn('[SetupCreatePage] set-current-facility failed:', json)
+        }
+      } catch (e) {
+        console.warn('[SetupCreatePage] set-current-facility exception:', e)
+      }
+
       // データベースの更新が反映されるまで少し待つ
       // その後、ホームにリダイレクト
       console.log('Facility created successfully, waiting before redirect...')
