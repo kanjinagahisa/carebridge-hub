@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import GroupList from '@/components/groups/GroupList'
-import type { Group } from '@/types/carebridge'
 import { ROLES } from '@/lib/constants'
+import GroupsListClient from './GroupsListClient'
 
 // 認証が必要なページのため、動的レンダリングを強制
 export const dynamic = 'force-dynamic'
@@ -135,39 +134,9 @@ export default async function GroupsPage() {
       isAdmin,
     })
 
-    let groups: Group[] = []
-    let groupsError: any = null
-
-    if (facilityIds.length > 0) {
-      console.log('[GroupsPage] Fetching groups for facilities:', facilityIds)
-      // adminSupabaseクライアントを使用してRLSをバイパスし、確実にグループを取得
-      const { data, error } = await adminSupabase
-        .from('groups')
-        .select('*')
-        .in('facility_id', facilityIds)
-        .eq('deleted', false)
-        .order('updated_at', { ascending: false })
-
-      if (error) {
-        console.error('[GroupsPage] Error fetching groups with admin client:', error)
-        groupsError = error
-      } else {
-        groups = (data as Group[]) || []
-        console.log('[GroupsPage] Fetched groups:', {
-          count: groups.length,
-          facilityIds: facilityIds.length,
-          facilityName,
-        })
-      }
-    } else {
-      console.log('[GroupsPage] No facility IDs found, skipping groups fetch')
-    }
-
-    console.log('[GroupsPage] Rendering GroupList with:', {
-      groupsCount: groups.length,
+    console.log('[GroupsPage] Rendering GroupsListClient with:', {
       facilityName,
       isAdmin,
-      hasError: !!groupsError,
     })
 
     return (
@@ -186,23 +155,11 @@ export default async function GroupsPage() {
           </div>
         </div>
 
-        <div className="p-4">
-          {groupsError ? (
-            <div className="bg-white rounded-xl shadow-sm p-6 text-center space-y-3">
-              <p className="text-gray-600">情報の取得に失敗しました。</p>
-              <p className="text-sm text-gray-500">
-                通信状況をご確認のうえ、もう一度お試しください。
-              </p>
-              <button
-                onClick={() => window.location.reload()}
-                className="mt-2 px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-              >
-                再読み込み
-              </button>
-            </div>
-          ) : (
-            <GroupList groups={groups} isAdmin={isAdmin} />
-          )}
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-gray-500">
+            所属グループの一覧を確認できます。
+          </p>
+          <GroupsListClient />
         </div>
       </div>
     )
