@@ -3,8 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Search, ChevronRight, Plus, FolderOpen } from 'lucide-react'
-import { format } from 'date-fns'
-import { ja } from 'date-fns/locale/ja'
+import { ClientOnlyDate } from '@/components/ClientOnlyDate'
 import type { Client } from '@/types/carebridge'
 
 interface ClientsListClientProps {
@@ -96,9 +95,7 @@ export default function ClientsListClient({
             : latestPost.body)
         : ''
       
-      const postDate = latestPost.created_at
-        ? format(new Date(latestPost.created_at), 'MM/dd HH:mm', { locale: ja })
-        : undefined
+      const postDate = latestPost.created_at ?? undefined
 
       return {
         text: bodyPreview || '投稿があります',
@@ -231,9 +228,10 @@ export default function ClientsListClient({
                               {secondaryInfo.text}
                             </p>
                             {secondaryInfo.postDate && (
-                              <span className="text-xs text-gray-400 flex-shrink-0">
-                                {secondaryInfo.postDate}
-                              </span>
+                              <ClientOnlyDate
+                                dateString={secondaryInfo.postDate}
+                                className="text-xs text-gray-400 flex-shrink-0"
+                              />
                             )}
                           </div>
                         </div>
