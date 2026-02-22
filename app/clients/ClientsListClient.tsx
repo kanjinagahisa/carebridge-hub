@@ -30,12 +30,13 @@ export default function ClientsListClient({
   const [searchQuery, setSearchQuery] = useState('')
   const [error, setError] = useState(initialError)
 
-  // デバッグログ
-  console.log('[ClientsListClient] Render:', {
-    clientsCount: initialClients?.length || 0,
-    facilityName,
-    hasError: !!error,
-  })
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[ClientsListClient] Render:', {
+      clientsCount: initialClients?.length || 0,
+      facilityName,
+      hasError: !!error,
+    })
+  }
 
   // 検索フィルタリング
   const filteredClients = useMemo(() => {

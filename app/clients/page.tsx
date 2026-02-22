@@ -11,11 +11,11 @@ export const dynamic = 'force-dynamic'
  * データ取得を行い、Client Component に渡す
  */
 export default async function ClientsPage() {
-  console.log('[ClientsPage] Starting...')
-  
+  if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Starting...')
+
   try {
     const supabase = await createClient()
-    console.log('[ClientsPage] Supabase client created')
+    if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Supabase client created')
     
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
@@ -34,14 +34,14 @@ export default async function ClientsPage() {
           let cookieValue = authTokenCookie.value
           if (cookieValue.startsWith('%')) {
             cookieValue = decodeURIComponent(cookieValue)
-            console.log('[ClientsPage] Cookie value URL decoded')
+            if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Cookie value URL decoded')
           }
 
           // JSON文字列として解析
           if (cookieValue.startsWith('{')) {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
-              console.log('[ClientsPage] Attempting to set session from cookie')
+              if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Attempting to set session from cookie')
               const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
                 access_token: sessionData.access_token,
                 refresh_token: sessionData.refresh_token,
@@ -49,7 +49,7 @@ export default async function ClientsPage() {
               if (setSessionError) {
                 console.error('[ClientsPage] Error setting session from cookie:', setSessionError.message)
               } else if (setSessionData?.user) {
-                console.log('[ClientsPage] Session set from cookie successfully, user:', setSessionData.user.email)
+                if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session set from cookie successfully, user:', setSessionData.user.email)
                 // setSession()の結果から直接userを取得
                 user = setSessionData.user
                 
@@ -58,7 +58,7 @@ export default async function ClientsPage() {
                 if (sessionError) {
                   console.error('[ClientsPage] Error getting session after setSession:', sessionError.message)
                 } else if (session) {
-                  console.log('[ClientsPage] Session confirmed after setSession:', session.user?.email)
+                  if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session confirmed after setSession:', session.user?.email)
                 } else {
                   console.warn('[ClientsPage] No session found after setSession, but user exists')
                 }
@@ -78,11 +78,13 @@ export default async function ClientsPage() {
         error: getUserError,
       } = await supabase.auth.getUser()
 
-      console.log('[ClientsPage] getUser result:', {
-        hasUser: !!getUserResult,
-        userId: getUserResult?.id,
-        getUserError: getUserError?.message,
-      })
+      if (process.env.NODE_ENV !== 'production') {
+        console.log('[ClientsPage] getUser result:', {
+          hasUser: !!getUserResult,
+          userId: getUserResult?.id,
+          getUserError: getUserError?.message,
+        })
+      }
 
       if (getUserResult) {
         user = getUserResult
@@ -90,7 +92,7 @@ export default async function ClientsPage() {
     }
 
     if (!user) {
-      console.log('[ClientsPage] No user found, returning null')
+      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No user found, returning null')
       return (
         <div className="min-h-screen bg-gray-100 pb-20 flex items-center justify-center">
           <p className="text-gray-600">ログインが必要です。</p>
@@ -98,7 +100,7 @@ export default async function ClientsPage() {
       )
     }
 
-    console.log('[ClientsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] User authenticated:', user.id, user.email)
 
     // Server ComponentではCookieの書き込みが制限されているため、
     // setSession()で設定したセッションがCookieに保存されず、
@@ -108,7 +110,7 @@ export default async function ClientsPage() {
     const adminSupabase = createAdminClient()
     
     // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
-    console.log('[ClientsPage] Fetching user facilities with admin client...')
+    if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id, created_at, facilities(name)')
@@ -116,11 +118,13 @@ export default async function ClientsPage() {
       .eq('deleted', false)
       .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
-    console.log('[ClientsPage] User facilities result:', {
-      hasError: !!facilitiesError,
-      error: facilitiesError?.message,
-      facilitiesCount: userFacilities?.length || 0,
-    })
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[ClientsPage] User facilities result:', {
+        hasError: !!facilitiesError,
+        error: facilitiesError?.message,
+        facilitiesCount: userFacilities?.length || 0,
+      })
+    }
 
     if (facilitiesError) {
       console.error('[ClientsPage] Error fetching user facilities:', facilitiesError)
@@ -135,22 +139,24 @@ export default async function ClientsPage() {
     // 最新の施設IDのみを取得（表示されている施設名に対応する施設）
     const latestFacilityId = userFacilities?.[0]?.facility_id
 
-    console.log('[ClientsPage] Facility info:', {
-      latestFacilityId,
-      facilityName,
-      allFacilities: userFacilities?.map((uf) => ({
-        facility_id: uf.facility_id,
-        created_at: uf.created_at,
-        name: Array.isArray(uf.facilities) ? uf.facilities[0]?.name : (uf.facilities as { name?: string } | null | undefined)?.name
-      }))
-    })
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[ClientsPage] Facility info:', {
+        latestFacilityId,
+        facilityName,
+        allFacilities: userFacilities?.map((uf) => ({
+          facility_id: uf.facility_id,
+          created_at: uf.created_at,
+          name: Array.isArray(uf.facilities) ? uf.facilities[0]?.name : (uf.facilities as { name?: string } | null | undefined)?.name
+        }))
+      })
+    }
 
     // 利用者を取得（最新の施設の利用者のみ）
     let clients: Client[] = []
     let clientsError: any = null
 
     if (latestFacilityId) {
-      console.log('[ClientsPage] Fetching clients for latest facility:', latestFacilityId)
+      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching clients for latest facility:', latestFacilityId)
       // adminSupabaseを使用してRLSをバイパス
       const { data, error } = await adminSupabase
         .from('clients')
@@ -164,14 +170,16 @@ export default async function ClientsPage() {
         clientsError = error
       } else {
         clients = (data as Client[]) || []
-        console.log('[ClientsPage] Fetched clients:', {
-          count: clients.length,
-          facilityId: latestFacilityId,
-          facilityName,
-        })
+        if (process.env.NODE_ENV !== 'production') {
+          console.log('[ClientsPage] Fetched clients:', {
+            count: clients.length,
+            facilityId: latestFacilityId,
+            facilityName,
+          })
+        }
       }
     } else {
-      console.log('[ClientsPage] No latest facility ID found, skipping clients fetch')
+      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No latest facility ID found, skipping clients fetch')
     }
 
     // 利用者ごとの最新投稿と未読数を取得
@@ -180,7 +188,7 @@ export default async function ClientsPage() {
     let unreadCountsMap: Record<string, number> = {}
 
     if (clientIds.length > 0 && user) {
-      console.log('[ClientsPage] Fetching latest posts and unread counts for clients')
+      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching latest posts and unread counts for clients')
       
       // 各利用者の最新投稿を取得
       const { data: latestPosts } = await adminSupabase
@@ -227,13 +235,15 @@ export default async function ClientsPage() {
       }
     }
 
-    console.log('[ClientsPage] Rendering ClientsListClient with:', {
-      clientsCount: clients.length,
-      facilityName,
-      hasError: !!clientsError,
-      postsMapSize: Object.keys(clientPostsMap).length,
-      unreadCountsSize: Object.keys(unreadCountsMap).length,
-    })
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[ClientsPage] Rendering ClientsListClient with:', {
+        clientsCount: clients.length,
+        facilityName,
+        hasError: !!clientsError,
+        postsMapSize: Object.keys(clientPostsMap).length,
+        unreadCountsSize: Object.keys(unreadCountsMap).length,
+      })
+    }
 
     return (
       <ClientsListClient

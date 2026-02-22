@@ -22,21 +22,23 @@ export async function updateSession(request: NextRequest) {
   const authCookies = cookies.filter((cookie) => 
     cookie.name.includes('sb-') || cookie.name.includes('supabase')
   )
-  console.log('[Middleware] Request path:', request.nextUrl.pathname)
-  console.log('[Middleware] Auth cookies found:', authCookies.length)
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[Middleware] Request path:', request.nextUrl.pathname)
+    console.log('[Middleware] Auth cookies found:', authCookies.length)
+  }
   if (authCookies.length > 0) {
-    console.log('[Middleware] Auth cookie names:', authCookies.map(c => c.name))
+    if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Auth cookie names:', authCookies.map(c => c.name))
     // Cookieの値は秘匿情報のため出力しない（形式のみ確認）
     authCookies.forEach(cookie => {
       const hasValue = !!cookie.value
       if (cookie.value && cookie.value.startsWith('{')) {
-        console.log(`[Middleware] Cookie ${cookie.name}: has value, JSON format`)
+        if (process.env.NODE_ENV !== 'production') console.log(`[Middleware] Cookie ${cookie.name}: has value, JSON format`)
       } else if (cookie.value && cookie.value.startsWith('%')) {
-        console.log(`[Middleware] Cookie ${cookie.name}: has value, URL encoded`)
+        if (process.env.NODE_ENV !== 'production') console.log(`[Middleware] Cookie ${cookie.name}: has value, URL encoded`)
       } else if (hasValue) {
-        console.log(`[Middleware] Cookie ${cookie.name}: has value`)
+        if (process.env.NODE_ENV !== 'production') console.log(`[Middleware] Cookie ${cookie.name}: has value`)
       } else {
-        console.log(`[Middleware] Cookie ${cookie.name}: empty`)
+        if (process.env.NODE_ENV !== 'production') console.log(`[Middleware] Cookie ${cookie.name}: empty`)
       }
     })
   }
@@ -81,7 +83,7 @@ export async function updateSession(request: NextRequest) {
         let cookieValue = authTokenCookie.value
         if (cookieValue.startsWith('%')) {
           cookieValue = decodeURIComponent(cookieValue)
-          console.log('[Middleware] Cookie value URL decoded')
+          if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Cookie value URL decoded')
         }
 
         // HTMLが含まれている場合はスキップ（エラーページの可能性）
@@ -95,7 +97,7 @@ export async function updateSession(request: NextRequest) {
         else if (cookieValue.startsWith('{')) {
           const sessionData = JSON.parse(cookieValue)
           if (sessionData.access_token && sessionData.refresh_token) {
-            console.log('[Middleware] Found JSON session data in cookie, setting session...')
+            if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Found JSON session data in cookie, setting session...')
             try {
               const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
                 access_token: sessionData.access_token,
@@ -105,7 +107,7 @@ export async function updateSession(request: NextRequest) {
                 console.error('[Middleware] Error setting session from cookie:', setSessionError.message)
                 // setSession()が失敗した場合、getUser()を試す
               } else if (setSessionData?.user) {
-                console.log('[Middleware] Session set from cookie successfully, user:', setSessionData.user.email)
+                if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Session set from cookie successfully, user:', setSessionData.user.email)
                 finalUser = setSessionData.user
               }
             } catch (setSessionErr: any) {
@@ -150,7 +152,7 @@ export async function updateSession(request: NextRequest) {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     
     // パブリックパスでない場合のみ詳細ログを出力
-    if (!isPublicPath) {
+    if (!isPublicPath && process.env.NODE_ENV !== 'production') {
       console.log('[Middleware] getSession result:', {
         hasSession: !!session,
         hasError: !!sessionError,
@@ -162,7 +164,7 @@ export async function updateSession(request: NextRequest) {
 
     // getSession()で取得できなかった場合、getUser()を試す
     if (!finalUser) {
-      if (!isPublicPath) {
+      if (!isPublicPath && process.env.NODE_ENV !== 'production') {
         console.log('[Middleware] getSession failed, trying getUser()...')
       }
       const {
@@ -173,7 +175,7 @@ export async function updateSession(request: NextRequest) {
       getUserError = error
       
       // パブリックパスでない場合のみ詳細ログを出力
-      if (!isPublicPath) {
+      if (!isPublicPath && process.env.NODE_ENV !== 'production') {
         console.log('[Middleware] getUser result:', {
           hasUser: !!user,
           hasError: !!getUserError,
@@ -197,9 +199,9 @@ export async function updateSession(request: NextRequest) {
     console.error('[Middleware] Error getting user:', getUserError.message)
     console.error('[Middleware] Error details:', getUserError)
   } else if (finalUser) {
-    console.log('[Middleware] User authenticated:', finalUser.id, finalUser.email)
+    if (process.env.NODE_ENV !== 'production') console.log('[Middleware] User authenticated:', finalUser.id, finalUser.email)
   } else {
-    console.log('[Middleware] No user found (not authenticated)')
+    if (process.env.NODE_ENV !== 'production') console.log('[Middleware] No user found (not authenticated)')
   }
 
   // 認証されていないユーザーのリダイレクト
@@ -218,7 +220,7 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith('/auth/reset-password')
   ) {
     // no user, potentially respond by redirecting the user to the login page
-    console.log('[Middleware] Redirecting to /login (no authenticated user)')
+    if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Redirecting to /login (no authenticated user)')
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)
@@ -243,8 +245,8 @@ export async function updateSession(request: NextRequest) {
     // ユーザーの所属施設を確認
     // createServerClientのセッション管理に問題があるため、
     // adminSupabaseを使用してRLSをバイパスし、確実に施設をチェックする
-    console.log('[Middleware] Checking facilities for user:', finalUser.id)
-    
+    if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Checking facilities for user:', finalUser.id)
+
     const adminSupabase = createAdminClient()
     const { data: roles, error: rolesError } = await adminSupabase
       .from('user_facility_roles')
@@ -252,25 +254,27 @@ export async function updateSession(request: NextRequest) {
       .eq('user_id', finalUser.id)
       .eq('deleted', false)
 
-    console.log('[Middleware] Facilities check result:', {
-      hasError: !!rolesError,
-      error: rolesError?.message || null,
-      errorCode: rolesError?.code || null,
-      errorDetails: rolesError?.details || null,
-      rolesCount: roles?.length || 0,
-      roles: roles || null,
-    })
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Middleware] Facilities check result:', {
+        hasError: !!rolesError,
+        error: rolesError?.message || null,
+        errorCode: rolesError?.code || null,
+        errorDetails: rolesError?.details || null,
+        rolesCount: roles?.length || 0,
+        roles: roles || null,
+      })
+    }
 
     if (rolesError) {
       console.error('[Middleware] Error checking user facilities:', rolesError)
     } else if (!roles || roles.length === 0) {
       // 施設に所属していない場合、セットアップ画面にリダイレクト
-      console.log('[Middleware] User has no facilities, redirecting to /setup/choose')
+      if (process.env.NODE_ENV !== 'production') console.log('[Middleware] User has no facilities, redirecting to /setup/choose')
       const url = request.nextUrl.clone()
       url.pathname = '/setup/choose'
       return NextResponse.redirect(url)
     } else {
-      console.log('[Middleware] User has facilities, allowing access to:', request.nextUrl.pathname)
+      if (process.env.NODE_ENV !== 'production') console.log('[Middleware] User has facilities, allowing access to:', request.nextUrl.pathname)
     }
   }
 

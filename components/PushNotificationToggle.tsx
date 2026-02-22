@@ -19,30 +19,30 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
 
   // クライアントサイドでのみマウント状態を管理
   useEffect(() => {
-    console.log('[PushNotificationToggle] useEffect called')
+    if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] useEffect called')
     setIsMounted(true)
-    console.log('[PushNotificationToggle] Component mounted, isMounted set to true')
+    if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] Component mounted, isMounted set to true')
   }, [])
 
   // ブラウザのサポート確認と初期状態の取得
   useEffect(() => {
     if (typeof window === 'undefined') {
-      console.log('[PushNotificationToggle] window is undefined (SSR)')
+      if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] window is undefined (SSR)')
       return
     }
 
-    console.log('[PushNotificationToggle] Checking browser support...')
-    console.log('[PushNotificationToggle] serviceWorker in navigator:', 'serviceWorker' in navigator)
-    console.log('[PushNotificationToggle] PushManager in window:', 'PushManager' in window)
+    if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] Checking browser support...')
+    if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] serviceWorker in navigator:', 'serviceWorker' in navigator)
+    if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] PushManager in window:', 'PushManager' in window)
 
     // Service WorkerとPush APIのサポート確認
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      console.log('[PushNotificationToggle] Browser does not support Web Push')
+      if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] Browser does not support Web Push')
       setIsSupported(false)
       return
     }
 
-    console.log('[PushNotificationToggle] Browser supports Web Push')
+    if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] Browser supports Web Push')
     setIsSupported(true)
 
     // Service Workerの登録（既存の登録があれば再利用）
@@ -72,7 +72,7 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
       const registration = await navigator.serviceWorker.ready
       const subscription = await registration.pushManager.getSubscription()
       setIsSubscribed(!!subscription)
-      console.log('[PushNotificationToggle] Subscription status checked:', !!subscription)
+      if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] Subscription status checked:', !!subscription)
     } catch (error) {
       console.error('[PushNotificationToggle] Error checking subscription:', error)
       setIsSubscribed(false)
@@ -236,16 +236,16 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
     return window.btoa(binary)
   }
 
-  // デバッグ用：常にコンポーネントを表示
-  console.log('[PushNotificationToggle] Render called:', { isMounted, isSupported, className })
-  
-  // サーバーサイドレンダリング時も表示（デバッグ用）
+  if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] Render called:', { isMounted, isSupported, className })
+
   if (!isMounted) {
-    console.log('[PushNotificationToggle] Not mounted yet, showing loading state')
+    if (process.env.NODE_ENV !== 'production') console.log('[PushNotificationToggle] Not mounted yet, showing loading state')
     return (
-      <div className={`bg-white rounded-xl shadow-sm p-4 border-2 border-red-500 ${className || ''}`}>
-        <h3 className="font-semibold text-gray-900 mb-2">プッシュ通知（読み込み中）</h3>
-        <p className="text-sm text-gray-600">コンポーネントは読み込まれています...</p>
+      <div className={`bg-white rounded-xl shadow-sm p-4 ${process.env.NODE_ENV !== 'production' ? 'border-2 border-red-500' : ''} ${className || ''}`}>
+        <h3 className="font-semibold text-gray-900 mb-2">プッシュ通知{process.env.NODE_ENV !== 'production' ? '（読み込み中）' : ''}</h3>
+        <p className="text-sm text-gray-600">
+          {process.env.NODE_ENV !== 'production' ? 'コンポーネントは読み込まれています...' : '読み込み中...'}
+        </p>
       </div>
     )
   }
@@ -258,9 +258,11 @@ export default function PushNotificationToggle({ className }: PushNotificationTo
         <p className="text-sm text-gray-600">
           このブラウザではWeb Push通知に対応していません。
         </p>
-        <p className="text-xs text-gray-500 mt-2">
-          デバッグ: Service Worker={typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? '✓' : '✗'}, PushManager={typeof window !== 'undefined' && 'PushManager' in window ? '✓' : '✗'}
-        </p>
+        {process.env.NODE_ENV !== 'production' && (
+          <p className="text-xs text-gray-500 mt-2">
+            デバッグ: Service Worker={typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? '✓' : '✗'}, PushManager={typeof window !== 'undefined' && 'PushManager' in window ? '✓' : '✗'}
+          </p>
+        )}
       </div>
     )
   }
