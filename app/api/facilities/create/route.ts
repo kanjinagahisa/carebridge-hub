@@ -6,10 +6,10 @@ export async function POST(request: NextRequest) {
   try {
     // デバッグ: Cookieを確認
     const cookies = request.cookies.getAll()
-    console.log('[API] All cookies found:', cookies.length)
-    console.log('[API] Cookie names:', cookies.map(c => c.name))
+    if (process.env.NODE_ENV !== "production") console.log('[API] All cookies found:', cookies.length)
+    if (process.env.NODE_ENV !== "production") console.log('[API] Cookie names:', cookies.map(c => c.name))
     const authCookies = cookies.filter(c => c.name.includes('sb-') || c.name.includes('auth-token') || c.name.includes('supabase'))
-    console.log('[API] Auth cookies:', authCookies.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length || 0 })))
+    if (process.env.NODE_ENV !== "production") console.log('[API] Auth cookies:', authCookies.map(c => ({ name: c.name, hasValue: !!c.value, valueLength: c.value?.length || 0 })))
 
     // API Route用のクライアントでユーザー認証を確認
     // NextRequestからCookieを読み取る
@@ -30,20 +30,20 @@ export async function POST(request: NextRequest) {
       }
       
       if (authTokenCookie && authTokenCookie.value) {
-        console.log('[API] Found auth cookie:', authTokenCookie.name)
+        if (process.env.NODE_ENV !== "production") console.log('[API] Found auth cookie:', authTokenCookie.name)
         try {
           // Cookieの値をURLデコード
           let cookieValue = authTokenCookie.value
           if (cookieValue.startsWith('%')) {
             cookieValue = decodeURIComponent(cookieValue)
-            console.log('[API] Cookie value URL decoded')
+            if (process.env.NODE_ENV !== "production") console.log('[API] Cookie value URL decoded')
           }
 
           // JSON文字列として解析
           if (cookieValue.startsWith('{')) {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
-              console.log('[API] Attempting to set session from cookie')
+              if (process.env.NODE_ENV !== "production") console.log('[API] Attempting to set session from cookie')
               const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
                 access_token: sessionData.access_token,
                 refresh_token: sessionData.refresh_token,
@@ -51,14 +51,14 @@ export async function POST(request: NextRequest) {
               if (setSessionError) {
                 console.error('[API] Error setting session from cookie:', setSessionError.message)
               } else if (setSessionData?.user) {
-                console.log('[API] Session set from cookie successfully, user:', setSessionData.user.email)
+                if (process.env.NODE_ENV !== "production") console.log('[API] Session set from cookie successfully, user:', setSessionData.user.email)
                 userFromCookie = setSessionData.user
               }
             } else {
-              console.log('[API] Cookie value does not contain access_token and refresh_token')
+              if (process.env.NODE_ENV !== "production") console.log('[API] Cookie value does not contain access_token and refresh_token')
             }
           } else {
-            console.log('[API] Cookie value does not start with {, first 50 chars:', cookieValue.substring(0, 50))
+            if (process.env.NODE_ENV !== "production") console.log('[API] Cookie value does not start with {, first 50 chars:', cookieValue.substring(0, 50))
           }
         } catch (err) {
           console.error('[API] Error processing cookie value:', err)
@@ -67,20 +67,20 @@ export async function POST(request: NextRequest) {
           }
         }
       } else {
-        console.log('[API] No valid auth cookie found')
+        if (process.env.NODE_ENV !== "production") console.log('[API] No valid auth cookie found')
       }
     } else {
-      console.log('[API] No auth cookies found')
+      if (process.env.NODE_ENV !== "production") console.log('[API] No auth cookies found')
     }
     
     // Cookieから取得したユーザー情報を優先
     if (userFromCookie) {
-      console.log('[API] Using user from cookie:', userFromCookie.email)
+      if (process.env.NODE_ENV !== "production") console.log('[API] Using user from cookie:', userFromCookie.email)
     }
 
     // セッションを確認
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    console.log('[API] Session check:', { hasSession: !!session, sessionError: sessionError?.message })
+    if (process.env.NODE_ENV !== "production") console.log('[API] Session check:', { hasSession: !!session, sessionError: sessionError?.message })
 
     const {
       data: { user },
@@ -90,7 +90,7 @@ export async function POST(request: NextRequest) {
     // Cookieから取得したユーザー情報を使用（getUser()で取得できない場合）
     const finalUser = userFromCookie || user
 
-    console.log('[API] User check:', { 
+    if (process.env.NODE_ENV !== "production") console.log('[API] User check:', { 
       hasUser: !!finalUser, 
       userId: finalUser?.id, 
       email: finalUser?.email,
@@ -169,7 +169,7 @@ export async function POST(request: NextRequest) {
 
     // usersテーブルにユーザーが存在しない場合は作成
     if (!existingUser) {
-      console.log('[API] User not found in users table, creating user record')
+      if (process.env.NODE_ENV !== "production") console.log('[API] User not found in users table, creating user record')
       const { error: userCreateError } = await adminSupabase.from('users').insert({
         id: finalUser.id,
         display_name: finalUser.email?.split('@')[0] || 'ユーザー',
