@@ -98,7 +98,7 @@ function LoginContent() {
           return
         }
         
-        console.log('[Login] Existing session found, checking user facilities')
+        if (process.env.NODE_ENV !== "production") console.log('[Login] Existing session found, checking user facilities')
         // リダイレクト試行回数を増やす
         redirectAttemptRef.current += 1
         if (typeof window !== 'undefined') {
@@ -122,11 +122,11 @@ function LoginContent() {
             redirectPath = '/setup/choose'
           } else if (!roles || roles.length === 0) {
             // 施設に所属していない場合、セットアップ画面にリダイレクト
-            console.log('[Login] User has no facilities, redirecting to /setup/choose')
+            if (process.env.NODE_ENV !== "production") console.log('[Login] User has no facilities, redirecting to /setup/choose')
             redirectPath = '/setup/choose'
           } else {
             // 施設に所属している場合、ホームにリダイレクト
-            console.log('[Login] User has facilities, redirecting to /home')
+            if (process.env.NODE_ENV !== "production") console.log('[Login] User has facilities, redirecting to /home')
             redirectPath = redirectTo || '/home'
           }
           
@@ -147,7 +147,7 @@ function LoginContent() {
           
           // リダイレクトを確実に実行するため、window.location.replace を使用
           // replace を使用することで、ブラウザの履歴に残さずにリダイレクト
-          console.log('[Login] Redirecting to:', redirectPath)
+          if (process.env.NODE_ENV !== "production") console.log('[Login] Redirecting to:', redirectPath)
           window.location.replace(redirectPath)
         } catch (err) {
           console.error('[Login] Error in facility check:', err)
@@ -228,7 +228,7 @@ function LoginContent() {
       // 新規登録確認（type=signup）の場合
       if (type === 'signup' && accessToken) {
         try {
-          console.log('[Login] Found signup confirmation token, setting session...')
+          if (process.env.NODE_ENV !== "production") console.log('[Login] Found signup confirmation token, setting session...')
           // セッションを確立
           const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -243,7 +243,7 @@ function LoginContent() {
           }
           
           if (data.session) {
-            console.log('[Login] Session established for signup confirmation')
+            if (process.env.NODE_ENV !== "production") console.log('[Login] Session established for signup confirmation')
             // リダイレクト中であることを示すため、isCheckingAuth を true に設定
             setIsCheckingAuth(true)
             // セッション確立後、即座にホーム画面にリダイレクト
@@ -267,13 +267,13 @@ function LoginContent() {
       const code = searchParams.get('code')
       if (code) {
         try {
-          console.log('[Login] Found code parameter, checking for existing session...')
+          if (process.env.NODE_ENV !== "production") console.log('[Login] Found code parameter, checking for existing session...')
           
           // 既にセッションが確立されているか確認
           const { data: { session }, error: sessionError } = await supabase.auth.getSession()
           
           if (session) {
-            console.log('[Login] Session already established from code')
+            if (process.env.NODE_ENV !== "production") console.log('[Login] Session already established from code')
             // リダイレクト中であることを示すため、isCheckingAuth を true に設定
             setIsCheckingAuth(true)
             // リダイレクトを確実に実行するため、window.location.href を使用
@@ -308,7 +308,7 @@ function LoginContent() {
       const queryAccessToken = searchParams.get('access_token')
       if (queryAccessToken) {
         try {
-          console.log('[Login] Found query parameter access_token, setting session...')
+          if (process.env.NODE_ENV !== "production") console.log('[Login] Found query parameter access_token, setting session...')
           const { data, error } = await supabase.auth.setSession({
             access_token: queryAccessToken,
             refresh_token: searchParams.get('refresh_token') || '',
@@ -322,7 +322,7 @@ function LoginContent() {
           }
           
           if (data.session) {
-            console.log('[Login] Session established for signup confirmation')
+            if (process.env.NODE_ENV !== "production") console.log('[Login] Session established for signup confirmation')
             // リダイレクト中であることを示すため、isCheckingAuth を true に設定
             setIsCheckingAuth(true)
             // リダイレクトを確実に実行するため、window.location.href を使用
@@ -377,7 +377,7 @@ function LoginContent() {
     
     // ローディング中は二重送信しない
     if (loading) {
-      console.log('Already processing login, ignoring duplicate request')
+      if (process.env.NODE_ENV !== "production") console.log('Already processing login, ignoring duplicate request')
       return
     }
     
@@ -394,7 +394,7 @@ function LoginContent() {
       })
 
       // 返ってきた { data, error } をコンソールに必ず表示する
-      console.log('signIn result', { data, error })
+      if (process.env.NODE_ENV !== "production") console.log('signIn result', { data, error })
 
       // error があれば setErrorMessage に保存し、画面に表示する
       if (error) {
@@ -419,7 +419,7 @@ function LoginContent() {
 
       // error がなく data.session が存在する場合のみ /home へリダイレクトする
       if (data?.session) {
-        console.log('Login successful, session exists:', data.session)
+        if (process.env.NODE_ENV !== "production") console.log('Login successful, session exists:', data.session)
         
         // リダイレクト中であることを示すため、isCheckingAuth を true に設定
         setIsCheckingAuth(true)
@@ -429,10 +429,10 @@ function LoginContent() {
         
         // セッションを再確認
         const { data: { session: currentSession } } = await supabase.auth.getSession()
-        console.log('Current session after wait:', currentSession)
+        if (process.env.NODE_ENV !== "production") console.log('Current session after wait:', currentSession)
         
         if (currentSession) {
-          console.log('Session confirmed, redirecting to:', redirectTo)
+          if (process.env.NODE_ENV !== "production") console.log('Session confirmed, redirecting to:', redirectTo)
           // リダイレクトを確実に実行するため、window.location.href を使用
           // 完全なページリロードを行い、サーバー側のミドルウェアがセッションを認識できるようにする
                 window.location.href = redirectTo
