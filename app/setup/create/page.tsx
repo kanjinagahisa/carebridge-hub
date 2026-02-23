@@ -32,14 +32,14 @@ export default function SetupCreatePage() {
         error: sessionError,
       } = await supabase.auth.getSession()
 
-      console.log('Session check:', { session: session ? 'exists' : 'null', sessionError })
+      if (process.env.NODE_ENV !== "production") console.log('Session check:', { session: session ? 'exists' : 'null', sessionError })
 
       const {
         data: { user },
         error: getUserError,
       } = await supabase.auth.getUser()
 
-      console.log('User check:', { user: user ? { id: user.id, email: user.email } : 'null', getUserError })
+      if (process.env.NODE_ENV !== "production") console.log('User check:', { user: user ? { id: user.id, email: user.email } : 'null', getUserError })
 
       if (!user) {
         console.error('No user found:', { sessionError, getUserError })
@@ -74,7 +74,7 @@ export default function SetupCreatePage() {
         }
       }
 
-      console.log('Ready to create facility:', {
+      if (process.env.NODE_ENV !== "production") console.log('Ready to create facility:', {
         userId: user.id,
         email: user.email,
         hasAccessToken: !!session.access_token,
@@ -91,7 +91,7 @@ export default function SetupCreatePage() {
 
       // サーバーサイドAPI Routeを使用して施設を作成
       // これにより、RLSポリシーの問題を回避できます
-      console.log('Calling server-side API to create facility...')
+      if (process.env.NODE_ENV !== "production") console.log('Calling server-side API to create facility...')
       
       const response = await fetch('/api/facilities/create', {
         method: 'POST',
@@ -137,7 +137,7 @@ export default function SetupCreatePage() {
 
       // データベースの更新が反映されるまで少し待つ
       // その後、ホームにリダイレクト
-      console.log('Facility created successfully, waiting before redirect...')
+      if (process.env.NODE_ENV !== "production") console.log('Facility created successfully, waiting before redirect...')
       await new Promise((resolve) => setTimeout(resolve, 500))
       
       // 完全なページリロードでホームにリダイレクト
