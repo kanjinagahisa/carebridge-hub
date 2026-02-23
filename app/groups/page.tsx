@@ -12,11 +12,11 @@ export const dynamic = 'force-dynamic'
  * データ取得を行い、Client Component に渡す
  */
 export default async function GroupsPage() {
-  console.log('[GroupsPage] Starting...')
+  if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Starting...')
 
   try {
     const supabase = await createClient()
-    console.log('[GroupsPage] Supabase client created')
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Supabase client created')
 
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
@@ -34,13 +34,13 @@ export default async function GroupsPage() {
           let cookieValue = authTokenCookie.value
           if (cookieValue.startsWith('%')) {
             cookieValue = decodeURIComponent(cookieValue)
-            console.log('[GroupsPage] Cookie value URL decoded')
+            if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Cookie value URL decoded')
           }
 
           if (cookieValue.startsWith('{')) {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
-              console.log('[GroupsPage] Attempting to set session from cookie')
+              if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Attempting to set session from cookie')
               const { data: setSessionData, error: setSessionError } =
                 await supabase.auth.setSession({
                   access_token: sessionData.access_token,
@@ -52,7 +52,7 @@ export default async function GroupsPage() {
                   setSessionError.message
                 )
               } else if (setSessionData?.user) {
-                console.log(
+                if (process.env.NODE_ENV !== "production") console.log(
                   '[GroupsPage] Session set from cookie successfully, user:',
                   setSessionData.user.email
                 )
@@ -73,7 +73,7 @@ export default async function GroupsPage() {
         error: getUserError,
       } = await supabase.auth.getUser()
 
-      console.log('[GroupsPage] getUser result (fallback):', {
+      if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] getUser result (fallback):', {
         hasUser: !!getUserResult,
         userId: getUserResult?.id,
         getUserError: getUserError?.message,
@@ -85,7 +85,7 @@ export default async function GroupsPage() {
     }
 
     if (!user) {
-      console.log('[GroupsPage] No user found, returning login required message')
+      if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] No user found, returning login required message')
       return (
         <div className="min-h-screen bg-gray-100 pb-20 flex items-center justify-center">
           <p className="text-gray-600">ログインが必要です。</p>
@@ -93,11 +93,11 @@ export default async function GroupsPage() {
       )
     }
 
-    console.log('[GroupsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] User authenticated:', user.id, user.email)
 
     // adminSupabaseクライアントを使用してRLSをバイパスし、確実に施設情報を取得
     const adminSupabase = createAdminClient()
-    console.log('[GroupsPage] Fetching user facilities with admin client...')
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id, role, created_at, facilities(name)')
@@ -105,7 +105,7 @@ export default async function GroupsPage() {
       .eq('deleted', false)
       .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
-    console.log('[GroupsPage] User facilities result:', {
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] User facilities result:', {
       hasError: !!facilitiesError,
       error: facilitiesError?.message,
       facilitiesCount: userFacilities?.length || 0,
@@ -129,7 +129,7 @@ export default async function GroupsPage() {
     const userRole = userFacilities?.[0]?.role
     const isAdmin = userRole === ROLES.ADMIN
 
-    console.log('[GroupsPage] Facility info:', {
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Facility info:', {
       facilityIdsCount: facilityIds.length,
       facilityName,
       isAdmin,
@@ -139,7 +139,7 @@ export default async function GroupsPage() {
     let groupsError: any = null
 
     if (facilityIds.length > 0) {
-      console.log('[GroupsPage] Fetching groups for facilities:', facilityIds)
+      if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetching groups for facilities:', facilityIds)
       // adminSupabaseクライアントを使用してRLSをバイパスし、確実にグループを取得
       const { data, error } = await adminSupabase
         .from('groups')
@@ -153,17 +153,17 @@ export default async function GroupsPage() {
         groupsError = error
       } else {
         groups = (data as Group[]) || []
-        console.log('[GroupsPage] Fetched groups:', {
+        if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetched groups:', {
           count: groups.length,
           facilityIds: facilityIds.length,
           facilityName,
         })
       }
     } else {
-      console.log('[GroupsPage] No facility IDs found, skipping groups fetch')
+      if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] No facility IDs found, skipping groups fetch')
     }
 
-    console.log('[GroupsPage] Rendering GroupList with:', {
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Rendering GroupList with:', {
       groupsCount: groups.length,
       facilityName,
       isAdmin,
