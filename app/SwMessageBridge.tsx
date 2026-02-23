@@ -24,7 +24,7 @@ export default function SwMessageBridge() {
       try {
         const u = new URL(raw, window.location.origin);
         if (u.origin !== window.location.origin) return;
-        console.log("[SwMessageBridge] navigate:", u.toString(), "payload:", data);
+        if (process.env.NODE_ENV !== "production") console.log("[SwMessageBridge] navigate:", u.toString(), "payload:", data);
         window.location.href = u.toString();
       } catch (e) {
         console.warn("[SwMessageBridge] invalid url:", raw, e);
