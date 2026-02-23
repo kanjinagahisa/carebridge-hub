@@ -53,7 +53,7 @@ export default function ClientTimeline({
       const unreadPostIds = postIds.filter((id) => !readPostIds.has(id))
 
       if (unreadPostIds.length > 0) {
-        console.log('[ClientTimeline] Marking posts as read:', unreadPostIds.length, 'posts')
+        if (process.env.NODE_ENV !== "production") console.log('[ClientTimeline] Marking posts as read:', unreadPostIds.length, 'posts')
         // 未読の投稿に既読をマーク
         const { data: insertData, error: insertError } = await supabase.from('post_reads').insert(
           unreadPostIds.map((postId) => ({
@@ -76,7 +76,7 @@ export default function ClientTimeline({
             console.error('[ClientTimeline] Current user ID:', currentUserId)
           }
         } else {
-          console.log('[ClientTimeline] Successfully marked posts as read:', insertData?.length || 0, 'records')
+          if (process.env.NODE_ENV !== "production") console.log('[ClientTimeline] Successfully marked posts as read:', insertData?.length || 0, 'records')
         }
       }
     } catch (error) {
@@ -121,7 +121,7 @@ export default function ClientTimeline({
       if (loadedPosts && loadedPosts.length > 0) {
         const authorIds = [...new Set(loadedPosts.map((p: any) => p.author_id).filter(Boolean))]
         if (authorIds.length > 0) {
-          console.log('[ClientTimeline] Fetching author information for', authorIds.length, 'authors')
+          if (process.env.NODE_ENV !== "production") console.log('[ClientTimeline] Fetching author information for', authorIds.length, 'authors')
           const { data: authors, error: authorsError } = await supabase
             .from('users')
             .select('id, display_name, profession')
@@ -131,7 +131,7 @@ export default function ClientTimeline({
           if (authorsError) {
             console.error('[ClientTimeline] Error fetching authors:', authorsError)
           } else {
-            console.log('[ClientTimeline] Fetched authors count:', authors?.length || 0)
+            if (process.env.NODE_ENV !== "production") console.log('[ClientTimeline] Fetched authors count:', authors?.length || 0)
             // 作者情報をマッピング
             const authorsMap = new Map(authors?.map((a: any) => [a.id, a]) || [])
             loadedPosts = loadedPosts.map((post: any) => ({
@@ -185,7 +185,7 @@ export default function ClientTimeline({
   ): Promise<string | null> => {
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(
+        if (process.env.NODE_ENV !== "production") console.log(
           `[ClientTimeline] Creating signed URL for attachment ${attachmentId}, attempt ${attempt}/${maxRetries}, storage path: ${storagePath}`
         )
         const { data: urlData, error: urlError } = await supabase.storage
@@ -220,7 +220,7 @@ export default function ClientTimeline({
         }
 
         if (urlData?.signedUrl) {
-          console.log(`[ClientTimeline] Successfully created signed URL for attachment ${attachmentId}`)
+          if (process.env.NODE_ENV !== "production") console.log(`[ClientTimeline] Successfully created signed URL for attachment ${attachmentId}`)
           return urlData.signedUrl
         }
 
@@ -336,7 +336,7 @@ export default function ClientTimeline({
           await loadPosts()
         } else {
           // initialPostsが渡された場合でも、署名付きURLを生成する
-          console.log('[ClientTimeline] Generating signed URLs for initial posts:', initialPosts.length)
+          if (process.env.NODE_ENV !== "production") console.log('[ClientTimeline] Generating signed URLs for initial posts:', initialPosts.length)
           const postsWithSignedUrls = await generateSignedUrls(initialPosts)
           setPosts(postsWithSignedUrls)
           // 初期表示時にも既読処理を実行

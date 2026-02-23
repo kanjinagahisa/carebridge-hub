@@ -66,8 +66,8 @@ export default function FacilityBasicInfoCard({
         return
       }
 
-      console.log('[FacilityBasicInfoCard] handleSave called')
-      console.log('[FacilityBasicInfoCard] Updating facility:', {
+      if (process.env.NODE_ENV !== "production") console.log('[FacilityBasicInfoCard] handleSave called')
+      if (process.env.NODE_ENV !== "production") console.log('[FacilityBasicInfoCard] Updating facility:', {
         name: formData.name.trim(),
         type: formData.type,
         address: formData.address.trim() || null,
@@ -91,8 +91,8 @@ export default function FacilityBasicInfoCard({
         throw error
       }
 
-      console.log('[FacilityBasicInfoCard] Facility updated successfully.')
-      console.log('[FacilityBasicInfoCard] Reloading page...')
+      if (process.env.NODE_ENV !== "production") console.log('[FacilityBasicInfoCard] Facility updated successfully.')
+      if (process.env.NODE_ENV !== "production") console.log('[FacilityBasicInfoCard] Reloading page...')
 
       // 保存成功後、ページをリロードして最新データを表示
       setIsEditing(false)

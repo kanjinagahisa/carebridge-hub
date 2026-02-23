@@ -10,10 +10,10 @@ export const dynamic = 'force-dynamic'
 export default async function SetupChoosePage() {
   // ログを同期的に出力するために、エラーハンドリングの前に出力
   try {
-    console.log('[SetupChoosePage] ========================================')
-    console.log('[SetupChoosePage] Starting...')
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] ========================================')
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Starting...')
     const supabase = await createClient()
-    console.log('[SetupChoosePage] Supabase client created')
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Supabase client created')
 
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
@@ -31,13 +31,13 @@ export default async function SetupChoosePage() {
           let cookieValue = authTokenCookie.value
           if (cookieValue.startsWith('%')) {
             cookieValue = decodeURIComponent(cookieValue)
-            console.log('[SetupChoosePage] Cookie value URL decoded')
+            if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Cookie value URL decoded')
           }
 
           if (cookieValue.startsWith('{')) {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
-              console.log('[SetupChoosePage] Attempting to set session from cookie')
+              if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Attempting to set session from cookie')
               const { data: setSessionData, error: setSessionError } =
                 await supabase.auth.setSession({
                   access_token: sessionData.access_token,
@@ -49,7 +49,7 @@ export default async function SetupChoosePage() {
                   setSessionError.message
                 )
               } else if (setSessionData?.user) {
-                console.log(
+                if (process.env.NODE_ENV !== "production") console.log(
                   '[SetupChoosePage] Session set from cookie successfully, user:',
                   setSessionData.user.email
                 )
@@ -70,14 +70,14 @@ export default async function SetupChoosePage() {
         error: getUserError,
       } = await supabase.auth.getUser()
 
-      console.log('[SetupChoosePage] getUser result:', {
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] getUser result:', {
         hasUser: !!getUserResult,
         userId: getUserResult?.id,
         getUserError: getUserError?.message,
       })
 
       if (getUserError || !getUserResult) {
-        console.log('[SetupChoosePage] No user found, showing setup page')
+        if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] No user found, showing setup page')
         // 未ログインの場合はセットアップ画面を表示
         return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center px-4">
@@ -116,11 +116,11 @@ export default async function SetupChoosePage() {
       user = getUserResult
     }
 
-    console.log('[SetupChoosePage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User authenticated:', user.id, user.email)
 
     // ログイン済みの場合、既に施設に所属しているかチェック
     const adminSupabase = createAdminClient()
-    console.log('[SetupChoosePage] Fetching user facilities with admin client...')
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id')
@@ -132,24 +132,24 @@ export default async function SetupChoosePage() {
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    console.log('[SetupChoosePage] User facility IDs:', facilityIds)
-    console.log('[SetupChoosePage] User facilities count:', facilityIds.length)
-    console.log('[SetupChoosePage] User facilities data:', JSON.stringify(userFacilities, null, 2))
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User facility IDs:', facilityIds)
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User facilities count:', facilityIds.length)
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User facilities data:', JSON.stringify(userFacilities, null, 2))
 
     // 既に施設に所属している場合は、ホーム画面にリダイレクト
     if (facilityIds.length > 0) {
-      console.log('[SetupChoosePage] ========================================')
-      console.log('[SetupChoosePage] REDIRECT CONDITION MET')
-      console.log('[SetupChoosePage] User already has facilities, redirecting to home')
-      console.log('[SetupChoosePage] User ID:', user.id)
-      console.log('[SetupChoosePage] User Email:', user.email)
-      console.log('[SetupChoosePage] Facility IDs:', JSON.stringify(facilityIds))
-      console.log('[SetupChoosePage] About to call redirect("/home")')
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] ========================================')
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] REDIRECT CONDITION MET')
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User already has facilities, redirecting to home')
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User ID:', user.id)
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User Email:', user.email)
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Facility IDs:', JSON.stringify(facilityIds))
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] About to call redirect("/home")')
       // redirect()は例外を投げるため、try-catchでキャッチされないように注意
       redirect('/home')
     }
 
-    console.log('[SetupChoosePage] User has no facilities, showing setup page')
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User has no facilities, showing setup page')
 
     // 施設に所属していない場合のみ、セットアップ画面を表示
     return (
@@ -187,10 +187,10 @@ export default async function SetupChoosePage() {
   } catch (error: any) {
     // NEXT_REDIRECTは正常なリダイレクト処理なので、再スローする
     if (error?.digest?.startsWith('NEXT_REDIRECT')) {
-      console.log('[SetupChoosePage] ========================================')
-      console.log('[SetupChoosePage] NEXT_REDIRECT detected in catch block')
-      console.log('[SetupChoosePage] Error digest:', error.digest)
-      console.log('[SetupChoosePage] Re-throwing NEXT_REDIRECT exception')
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] ========================================')
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] NEXT_REDIRECT detected in catch block')
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Error digest:', error.digest)
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Re-throwing NEXT_REDIRECT exception')
       // リダイレクト例外を再スローして、Next.jsが正しくリダイレクトを処理できるようにする
       throw error
     }
