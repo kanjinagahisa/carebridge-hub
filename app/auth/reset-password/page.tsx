@@ -97,7 +97,7 @@ function ResetPasswordContent() {
       // パスワードリセットタイプか確認
       if (type === 'recovery' && accessToken) {
         try {
-          console.log('[ResetPassword] Found hash fragment with access_token, setting session...')
+          if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Found hash fragment with access_token, setting session...')
           // セッションを確立
           const { data, error } = await supabase.auth.setSession({
             access_token: accessToken,
@@ -113,7 +113,7 @@ function ResetPasswordContent() {
           }
           
           if (data.session) {
-            console.log('[ResetPassword] Session established for password reset')
+            if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Session established for password reset')
             setIsValidatingToken(false)
           } else {
             setHasTokenError(true) // トークンエラーを設定
@@ -135,20 +135,20 @@ function ResetPasswordContent() {
       const code = searchParams.get('code')
       if (code) {
         try {
-          console.log('[ResetPassword] Found code parameter, checking for existing session...')
+          if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Found code parameter, checking for existing session...')
           
           // まず、既にセッションが確立されているか確認
           // Supabaseが自動的にセッションを確立している可能性がある
           const { data: { session }, error: sessionError } = await supabase.auth.getSession()
           
           if (session) {
-            console.log('[ResetPassword] Session already established from code')
+            if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Session already established from code')
             setIsValidatingToken(false)
             return
           }
           
           // セッションが確立されていない場合、codeパラメータは無効または期限切れの可能性がある
-          console.log('[ResetPassword] No session found for code parameter')
+          if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] No session found for code parameter')
           setHasTokenError(true)
           setErrorMessage('リンクの有効期限が切れているか、無効です。新しいパスワード再設定メールを送信してください。')
           setIsValidatingToken(false)
@@ -166,7 +166,7 @@ function ResetPasswordContent() {
       const queryAccessToken = searchParams.get('access_token')
       if (queryAccessToken) {
         try {
-          console.log('[ResetPassword] Found query parameter access_token, setting session...')
+          if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Found query parameter access_token, setting session...')
           const { data, error } = await supabase.auth.setSession({
             access_token: queryAccessToken,
             refresh_token: searchParams.get('refresh_token') || '',
@@ -181,7 +181,7 @@ function ResetPasswordContent() {
           }
           
           if (data.session) {
-            console.log('[ResetPassword] Session established for password reset')
+            if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Session established for password reset')
             setIsValidatingToken(false)
           } else {
             setHasTokenError(true) // トークンエラーを設定
@@ -251,7 +251,7 @@ function ResetPasswordContent() {
       // パスワード更新成功
       // パスワード変更完了メールを送信（APIエンドポイントを呼び出し）
       try {
-        console.log('[ResetPassword] Sending password changed notification email request...', {
+        if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Sending password changed notification email request...', {
           userId: user.id,
           email: user.email,
         })
@@ -268,7 +268,7 @@ function ResetPasswordContent() {
         })
         
         const responseData = await response.json()
-        console.log('[ResetPassword] Password changed notification response:', {
+        if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Password changed notification response:', {
           status: response.status,
           data: responseData,
         })
@@ -278,7 +278,7 @@ function ResetPasswordContent() {
         } else if (responseData.emailSent === false) {
           console.warn('[ResetPassword] Email sending failed:', responseData.error)
         } else if (responseData.emailSent === true) {
-          console.log('[ResetPassword] ✅ Email sent successfully!')
+          if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] ✅ Email sent successfully!')
         }
       } catch (emailError) {
         // メール送信エラーは無視（パスワードは既に更新済み）
