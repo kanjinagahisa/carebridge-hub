@@ -12,11 +12,11 @@ import StaffManagementCard from '@/components/settings/StaffManagementCard'
 export const dynamic = 'force-dynamic'
 
 export default async function FacilitySettingsPage() {
-  console.log('[FacilitySettingsPage] Starting...')
+  if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Starting...')
 
   try {
     const supabase = await createClient()
-    console.log('[FacilitySettingsPage] Supabase client created')
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Supabase client created')
 
     // クッキーからセッションを設定する（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
@@ -35,14 +35,14 @@ export default async function FacilitySettingsPage() {
           let cookieValue = authTokenCookie.value
           if (cookieValue.startsWith('%')) {
             cookieValue = decodeURIComponent(cookieValue)
-            console.log('[FacilitySettingsPage] Cookie value URL decoded')
+            if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Cookie value URL decoded')
           }
 
           // JSON形式の場合、パースしてセッションを設定
           if (cookieValue.startsWith('{')) {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
-              console.log('[FacilitySettingsPage] Found JSON session data in cookie, setting session...')
+              if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Found JSON session data in cookie, setting session...')
               try {
                 const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
                   access_token: sessionData.access_token,
@@ -51,7 +51,7 @@ export default async function FacilitySettingsPage() {
                 if (setSessionError) {
                   console.error('[FacilitySettingsPage] Error setting session from cookie:', setSessionError.message)
                 } else if (setSessionData?.user) {
-                  console.log('[FacilitySettingsPage] Session set from cookie successfully, user:', setSessionData.user.email)
+                  if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Session set from cookie successfully, user:', setSessionData.user.email)
                   user = setSessionData.user
                 }
               } catch (setSessionErr: any) {
@@ -73,7 +73,7 @@ export default async function FacilitySettingsPage() {
         error: getUserError,
       } = await supabase.auth.getUser()
 
-      console.log('[FacilitySettingsPage] getUser result:', {
+      if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] getUser result:', {
         hasUser: !!getUserResult,
         userId: getUserResult?.id,
         getUserError: getUserError?.message,
@@ -85,22 +85,22 @@ export default async function FacilitySettingsPage() {
     }
 
     if (!user) {
-      console.log('[FacilitySettingsPage] No user found, redirecting to login')
+      if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] No user found, redirecting to login')
       redirect('/login')
     }
 
-    console.log('[FacilitySettingsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] User authenticated:', user.id, user.email)
 
     // adminSupabaseクライアントを使用してRLSをバイパスし、確実に施設情報を取得
     const adminSupabase = createAdminClient()
-    console.log('[FacilitySettingsPage] Fetching user facilities with admin client...')
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id, role, facilities(name)')
       .eq('user_id', user.id)
       .eq('deleted', false)
 
-    console.log('[FacilitySettingsPage] User facilities result:', {
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] User facilities result:', {
       hasError: !!facilitiesError,
       error: facilitiesError?.message,
       facilitiesCount: userFacilities?.length || 0,
@@ -137,7 +137,7 @@ export default async function FacilitySettingsPage() {
 
     // staffユーザーはアクセス不可
     if (!isAdminUser) {
-      console.log('[FacilitySettingsPage] User is not admin, redirecting to home')
+      if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] User is not admin, redirecting to home')
       redirect('/home')
     }
 
@@ -149,7 +149,7 @@ export default async function FacilitySettingsPage() {
       : (firstFacility as { name: string } | null | undefined)?.name
 
     // 施設情報を取得
-    console.log('[FacilitySettingsPage] Fetching facility info for:', firstFacilityId)
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Fetching facility info for:', firstFacilityId)
     const { data: facility, error: facilityError } = await adminSupabase
       .from('facilities')
       .select('*')
@@ -175,7 +175,7 @@ export default async function FacilitySettingsPage() {
     }
 
     // スタッフ一覧を取得
-    console.log('[FacilitySettingsPage] Fetching staff members for facility:', firstFacilityId)
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Fetching staff members for facility:', firstFacilityId)
     const { data: staffMembersData, error: staffError } = await adminSupabase
       .from('user_facility_roles')
       .select('user_id, role, users(display_name, email)')
@@ -193,7 +193,7 @@ export default async function FacilitySettingsPage() {
       console.error('[FacilitySettingsPage] Error fetching staff members:', staffError)
     }
 
-    console.log('[FacilitySettingsPage] Rendering with:', {
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Rendering with:', {
       facilityId: firstFacilityId,
       facilityName,
       staffCount: staffMembers?.length || 0,
