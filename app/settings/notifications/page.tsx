@@ -9,11 +9,11 @@ import PushNotificationToggle from '@/components/PushNotificationToggle'
 export const dynamic = 'force-dynamic'
 
 export default async function NotificationsSettingsPage() {
-  console.log('[NotificationsSettingsPage] Starting...')
+  if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] Starting...')
 
   try {
     const supabase = await createClient()
-    console.log('[NotificationsSettingsPage] Supabase client created')
+    if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] Supabase client created')
 
     // クッキーからセッションを設定する（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
@@ -32,14 +32,14 @@ export default async function NotificationsSettingsPage() {
           let cookieValue = authTokenCookie.value
           if (cookieValue.startsWith('%')) {
             cookieValue = decodeURIComponent(cookieValue)
-            console.log('[NotificationsSettingsPage] Cookie value URL decoded')
+            if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] Cookie value URL decoded')
           }
 
           // JSON形式の場合、パースしてセッションを設定
           if (cookieValue.startsWith('{')) {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
-              console.log('[NotificationsSettingsPage] Found JSON session data in cookie, setting session...')
+              if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] Found JSON session data in cookie, setting session...')
               try {
                 const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
                   access_token: sessionData.access_token,
@@ -48,7 +48,7 @@ export default async function NotificationsSettingsPage() {
                 if (setSessionError) {
                   console.error('[NotificationsSettingsPage] Error setting session from cookie:', setSessionError.message)
                 } else if (setSessionData?.user) {
-                  console.log('[NotificationsSettingsPage] Session set from cookie successfully, user:', setSessionData.user.email)
+                  if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] Session set from cookie successfully, user:', setSessionData.user.email)
                   user = setSessionData.user
                 }
               } catch (setSessionErr: any) {
@@ -69,7 +69,7 @@ export default async function NotificationsSettingsPage() {
         error: getUserError,
       } = await supabase.auth.getUser()
 
-      console.log('[NotificationsSettingsPage] getUser result:', {
+      if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] getUser result:', {
         hasUser: !!getUserResult,
         userId: getUserResult?.id,
         getUserError: getUserError?.message,
@@ -81,11 +81,11 @@ export default async function NotificationsSettingsPage() {
     }
 
     if (!user) {
-      console.log('[NotificationsSettingsPage] No user found, redirecting to login')
+      if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] No user found, redirecting to login')
       redirect('/login')
     }
 
-    console.log('[NotificationsSettingsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] User authenticated:', user.id, user.email)
 
     return (
       <div className="min-h-screen bg-gray-100 pb-20">
