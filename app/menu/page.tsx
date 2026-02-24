@@ -146,6 +146,7 @@ export default async function MenuPage() {
 
     // current_facility_id を取得（施設切り替えUIで使用）
     const currentFacilityId = profile?.current_facility_id || null
+    const settingsFacilityId = currentFacilityId ?? latestFacilityId
 
     // 施設切り替えUI用のデータを準備
     const facilitiesForSwitcher = userFacilities?.map((uf) => {
@@ -215,7 +216,7 @@ export default async function MenuPage() {
                   <span className="text-gray-900">招待</span>
                 </Link>
                 <Link
-                  href="/settings/facility"
+                  href={settingsFacilityId ? `/settings/facility?facility_id=${settingsFacilityId}` : "/settings/facility"}
                   className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"
                 >
                   <Settings size={20} className="text-gray-600" />

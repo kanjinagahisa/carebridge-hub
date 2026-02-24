@@ -7,11 +7,12 @@ import { ROLES } from '@/lib/constants'
 import { getUserRole } from '@/lib/utils/auth-server'
 import FacilityBasicInfoCard from '@/components/settings/FacilityBasicInfoCard'
 import StaffManagementCard from '@/components/settings/StaffManagementCard'
+import FacilityLeaveCard from '@/components/settings/FacilityLeaveCard'
 
 // 認証が必要なページのため、動的レンダリングを強制
 export const dynamic = 'force-dynamic'
 
-export default async function FacilitySettingsPage() {
+export default async function FacilitySettingsPage({ searchParams }: { searchParams?: { facility_id?: string } }) {
   if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Starting...')
 
   try {
@@ -131,29 +132,50 @@ export default async function FacilitySettingsPage() {
       )
     }
 
-    // ユーザーのロールを取得（admin/staff判定用）
-    const userRole = await getUserRole(user.id, facilityIds[0])
-    const isAdminUser = userRole === ROLES.ADMIN
+    const { data: activeFacilities } = await adminSupabase
+      .from('facilities')
+      .select('id')
+      .in('id', facilityIds)
+      .eq('deleted', false)
+    const activeFacilityIds = activeFacilities?.map((f: { id: string }) => f.id) ?? []
 
-    // staffユーザーはアクセス不可
-    if (!isAdminUser) {
-      if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] User is not admin, redirecting to home')
-      redirect('/home')
+    if (activeFacilityIds.length === 0) {
+      return (
+        <div className="min-h-screen bg-gray-100 pb-20 flex items-center justify-center">
+          <div className="bg-white rounded-xl shadow-sm p-6 text-center space-y-3">
+            <p className="text-gray-600">有効な施設がありません。管理者に連絡してください。</p>
+            <Link
+              href="/home"
+              className="mt-2 px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 transition-colors inline-block"
+            >
+              ホームへ戻る
+            </Link>
+          </div>
+        </div>
+      )
     }
 
-    // 最初の施設を取得（複数施設の場合は最初の施設を表示）
-    const firstFacilityId = facilityIds[0]
-    const firstFacility = userFacilities?.[0]?.facilities as { name: string } | { name: string }[] | null | undefined
+    const selectedFacilityId =
+      searchParams?.facility_id && activeFacilityIds.includes(searchParams.facility_id)
+        ? searchParams.facility_id
+        : activeFacilityIds[0]
+
+    // ユーザーのロールを取得（admin/staff判定用）
+    const userRole = await getUserRole(user.id, selectedFacilityId)
+    const isAdminUser = userRole === ROLES.ADMIN
+
+    const selectedEntry = userFacilities?.find((uf: { facility_id: string }) => uf.facility_id === selectedFacilityId)
+    const firstFacility = selectedEntry?.facilities as { name: string } | { name: string }[] | null | undefined
     const facilityName = Array.isArray(firstFacility)
       ? firstFacility[0]?.name
       : (firstFacility as { name: string } | null | undefined)?.name
 
     // 施設情報を取得
-    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Fetching facility info for:', firstFacilityId)
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Fetching facility info for:', selectedFacilityId)
     const { data: facility, error: facilityError } = await adminSupabase
       .from('facilities')
       .select('*')
-      .eq('id', firstFacilityId)
+      .eq('id', selectedFacilityId)
       .eq('deleted', false)
       .single()
 
@@ -175,11 +197,11 @@ export default async function FacilitySettingsPage() {
     }
 
     // スタッフ一覧を取得
-    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Fetching staff members for facility:', firstFacilityId)
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Fetching staff members for facility:', selectedFacilityId)
     const { data: staffMembersData, error: staffError } = await adminSupabase
       .from('user_facility_roles')
       .select('user_id, role, users(display_name, email)')
-      .eq('facility_id', firstFacilityId)
+      .eq('facility_id', selectedFacilityId)
       .eq('deleted', false)
 
     // データをStaffMember型に変換（usersが配列の場合、最初の要素を使用）
@@ -194,7 +216,7 @@ export default async function FacilitySettingsPage() {
     }
 
     if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Rendering with:', {
-      facilityId: firstFacilityId,
+      facilityId: selectedFacilityId,
       facilityName,
       staffCount: staffMembers?.length || 0,
     })
@@ -224,13 +246,18 @@ export default async function FacilitySettingsPage() {
         </div>
 
         <div className="p-4 space-y-4">
-          <FacilityBasicInfoCard
-            facility={facility}
-          />
-          <StaffManagementCard
-            staffMembers={staffMembers || []}
-            facilityId={firstFacilityId}
-          />
+          {isAdminUser && (
+            <FacilityBasicInfoCard
+              facility={facility}
+            />
+          )}
+          {isAdminUser && (
+            <StaffManagementCard
+              staffMembers={staffMembers || []}
+              facilityId={selectedFacilityId}
+            />
+          )}
+          <FacilityLeaveCard facilityId={selectedFacilityId} />
         </div>
       </div>
     )
