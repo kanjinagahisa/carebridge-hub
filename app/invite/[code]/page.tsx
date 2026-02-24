@@ -325,27 +325,23 @@ export default function InviteAcceptPage() {
         console.log('[InviteAcceptPage] User created in public.users successfully')
       }
 
-      // user_facility_rolesに追加（roleはinvite_codesから取得）。upsertで復職ケースも成立
-      const { error: upsertRoleError } = await supabase
-        .from('user_facility_roles')
-        .upsert(
-          {
-            user_id: user.id,
-            facility_id: inviteData.facility_id,
-            role: inviteData.role || ROLES.STAFF, // invite_codesから取得したroleを使用
-            deleted: false,
-          },
-          { onConflict: 'user_id,facility_id' }
-        )
+      // user_facility_rolesに追加（roleはinvite_codesから取得）。API(Service Role)経由でRLS回避
+      const roleRes = await fetch('/api/user-facility-roles/upsert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          facilityId: inviteData.facility_id,
+          role: inviteData.role || ROLES.STAFF,
+        }),
+      })
 
-      if (upsertRoleError) {
-        // 外部キー制約エラー（23503）の場合もエラーメッセージを表示
-        if (upsertRoleError?.code === '23503' || (upsertRoleError as any)?.details?.code === '23503') {
-          setError('ユーザー情報が見つかりませんでした。ページを再読み込みしてお試しください。')
-          setIsProcessing(false)
-          return
-        }
-        throw upsertRoleError
+      if (!roleRes.ok) {
+        const roleErr = await roleRes.json().catch(() => null)
+        console.error('[InviteAcceptPage] Failed to upsert user_facility_roles via API:', roleErr)
+        setError(roleErr?.error ?? '参加処理に失敗しました。')
+        setIsProcessing(false)
+        return
       }
 
       const setRes = await fetch('/api/users/set-current-facility', {
