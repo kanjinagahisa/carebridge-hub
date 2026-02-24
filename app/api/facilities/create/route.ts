@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
     // API Route用のクライアントでユーザー認証を確認
     // NextRequestからCookieを読み取る
-    const supabase = createApiClient(request)
+    const supabase = await createApiClient(request)
 
     // Cookieからセッション情報を抽出して設定を試みる（ミドルウェアと同じ処理）
     let userFromCookie: any = null
