@@ -262,27 +262,30 @@ export default function InviteAcceptPage() {
         const profession =
           user.user_metadata?.profession || PROFESSIONS.OTHER
 
-        const { error: userUpsertError } = await supabase
-          .from('users')
-          .upsert(
-            {
-              id: user.id,
-              email: user.email || '',
-              display_name: displayName,
-              profession: profession,
-            },
-            { onConflict: 'id' }
+        const res = await fetch('/api/users/upsert-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: user.id,
+            email: user.email || '',
+            display_name: displayName,
+            profession: profession,
+          }),
+        })
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => null)
+          console.error(
+            '[InviteAcceptPage] Failed to upsert user in public.users via API:',
+            errBody
           )
 
-        if (userUpsertError) {
-          console.error('[InviteAcceptPage] Failed to upsert user in public.users:', userUpsertError)
-          // 外部キー制約エラー（23503）の場合は、ユーザー作成に失敗したことを示す
-          if (userUpsertError.code === '23503') {
+          if (errBody?.details?.code === '23503') {
             setError('ユーザー情報の作成に失敗しました。管理者にお問い合わせください。')
             setIsProcessing(false)
             return
           }
-          throw userUpsertError
+          throw new Error(errBody?.error ?? 'Failed to upsert user profile')
         }
 
         console.log('[InviteAcceptPage] User created in public.users successfully')
