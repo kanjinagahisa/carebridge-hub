@@ -182,7 +182,24 @@ export default function InviteAcceptPage() {
             .maybeSingle()
 
           if (existingRole) {
-            // 既に参加している場合は、使用済みでも「既に参加済み」として処理
+            // 既に参加している場合は、使用済みでも「既に参加済み」として処理。current_facility_id を必ずセット
+            const setRes = await fetch('/api/users/set-current-facility', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: currentUser.id,
+                facilityId: invite.facility_id,
+              }),
+            })
+
+            if (!setRes.ok) {
+              const setErr = await setRes.json().catch(() => null)
+              console.error('[InviteAcceptPage] Failed to set current facility:', setErr)
+              setError(setErr?.error ?? 'Failed to set current facility')
+              setIsLoading(false)
+              return
+            }
+
             setIsAlreadyMember(true)
             setIsLoading(false)
             return
@@ -234,6 +251,23 @@ export default function InviteAcceptPage() {
         .maybeSingle()
 
       if (existingRole) {
+        const setRes = await fetch('/api/users/set-current-facility', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: user.id,
+            facilityId: inviteData.facility_id,
+          }),
+        })
+
+        if (!setRes.ok) {
+          const setErr = await setRes.json().catch(() => null)
+          console.error('[InviteAcceptPage] Failed to set current facility:', setErr)
+          setError(setErr?.error ?? 'Failed to set current facility')
+          setIsProcessing(false)
+          return
+        }
+
         setIsAlreadyMember(true)
         setIsProcessing(false)
         return
@@ -291,29 +325,42 @@ export default function InviteAcceptPage() {
         console.log('[InviteAcceptPage] User created in public.users successfully')
       }
 
-      // user_facility_rolesに追加（roleはinvite_codesから取得）
-      const { error: insertError } = await supabase
+      // user_facility_rolesに追加（roleはinvite_codesから取得）。upsertで復職ケースも成立
+      const { error: upsertRoleError } = await supabase
         .from('user_facility_roles')
-        .insert({
-          user_id: user.id,
-          facility_id: inviteData.facility_id,
-          role: inviteData.role || ROLES.STAFF, // invite_codesから取得したroleを使用
-        })
+        .upsert(
+          {
+            user_id: user.id,
+            facility_id: inviteData.facility_id,
+            role: inviteData.role || ROLES.STAFF, // invite_codesから取得したroleを使用
+            deleted: false,
+          },
+          { onConflict: 'user_id,facility_id' }
+        )
 
-      if (insertError) {
-        // 重複エラーの場合は既に所属しているとみなす
-        if (insertError.code === '23505') {
-          setIsAlreadyMember(true)
-          setIsProcessing(false)
-          return
-        }
+      if (upsertRoleError) {
         // 外部キー制約エラー（23503）の場合もエラーメッセージを表示
-        if (insertError.code === '23503') {
+        if (upsertRoleError?.code === '23503' || (upsertRoleError as any)?.details?.code === '23503') {
           setError('ユーザー情報が見つかりませんでした。ページを再読み込みしてお試しください。')
           setIsProcessing(false)
           return
         }
-        throw insertError
+        throw upsertRoleError
+      }
+
+      const setRes = await fetch('/api/users/set-current-facility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          facilityId: inviteData.facility_id,
+        }),
+      })
+
+      if (!setRes.ok) {
+        const setErr = await setRes.json().catch(() => null)
+        console.error('[InviteAcceptPage] Failed to set current facility:', setErr)
+        throw new Error(setErr?.error ?? 'Failed to set current facility')
       }
 
       // 招待コードを使用済みにする
