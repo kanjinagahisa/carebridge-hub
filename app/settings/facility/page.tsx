@@ -257,7 +257,7 @@ export default async function FacilitySettingsPage({ searchParams }: { searchPar
               facilityId={selectedFacilityId}
             />
           )}
-          <FacilityLeaveCard facilityId={selectedFacilityId} />
+          <FacilityLeaveCard facilityId={selectedFacilityId} isAdminUser={isAdminUser} />
         </div>
       </div>
     )

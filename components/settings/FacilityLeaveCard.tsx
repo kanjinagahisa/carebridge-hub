@@ -8,7 +8,7 @@ type Candidate = {
   users?: { display_name?: string; email?: string } | null
 }
 
-export default function FacilityLeaveCard({ facilityId }: { facilityId: string }) {
+export default function FacilityLeaveCard({ facilityId, isAdminUser }: { facilityId: string; isAdminUser: boolean }) {
   const [isLoading, setIsLoading] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
 
@@ -121,7 +121,9 @@ export default function FacilityLeaveCard({ facilityId }: { facilityId: string }
     <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-gray-900">脱退</h2>
-        <span className="text-xs text-gray-500">管理者向け</span>
+        {isAdminUser && (
+          <span className="text-xs text-gray-500">管理者向け</span>
+        )}
       </div>
 
       <p className="text-sm text-gray-600">
