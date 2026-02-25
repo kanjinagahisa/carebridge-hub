@@ -11,6 +11,17 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
+    const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
+    const pri = process.env.VAPID_PRIVATE_KEY ?? "";
+    console.log("[vapid-check]", {
+      pub_len: pub.length,
+      pub_head: pub.slice(0, 10),
+      pub_tail: pub.slice(-10),
+      pri_len: pri.length,
+      pri_head: pri.slice(0, 10),
+      pri_tail: pri.slice(-10),
+    });
+
     console.log('[push/notify][POST] start')
 
     // Cookie名一覧を取得（デバッグ用）
@@ -61,60 +72,121 @@ export async function POST(request: NextRequest) {
 
     // リクエストボディを取得
     const body = await request.json()
-    const { postId, clientId } = body
+    const { postId, clientId, groupId } = body
 
-    if (!postId || !clientId) {
+    if (!postId) {
+      return NextResponse.json({ error: 'postId is required' }, { status: 400 })
+    }
+    if (clientId && groupId) {
       return NextResponse.json(
-        { error: 'postId and clientId are required' },
+        { error: 'clientId and groupId cannot both be provided' },
+        { status: 400 }
+      )
+    }
+    if (!clientId && !groupId) {
+      return NextResponse.json(
+        { error: 'clientId or groupId is required' },
         { status: 400 }
       )
     }
 
-    // 投稿情報を取得
-    const { data: post, error: postError } = await supabase
-      .from('posts')
-      .select('id, author_id, client_id, body, created_at')
-      .eq('id', postId)
-      .eq('client_id', clientId)
-      .single()
+    let facilityId: string
+    let payload: { title: string; body: string; url: string }
+    let authorId: string
 
-    if (postError || !post) {
-      console.error('[push/notify][POST] Failed to fetch post:', postError)
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
-    }
+    if (clientId) {
+      // 投稿情報を取得（利用者投稿）
+      const { data: post, error: postError } = await supabase
+        .from('posts')
+        .select('id, author_id, client_id, body, created_at')
+        .eq('id', postId)
+        .eq('client_id', clientId)
+        .single()
 
-    // 利用者情報を取得
-    const { data: client, error: clientError } = await supabase
-      .from('clients')
-      .select('id, name, facility_id')
-      .eq('id', clientId)
-      .single()
+      if (postError || !post) {
+        console.error('[push/notify][POST] Failed to fetch post:', postError)
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+      }
 
-    if (clientError || !client) {
-      console.error('[push/notify][POST] Failed to fetch client:', clientError)
-      return NextResponse.json({ error: 'Client not found' }, { status: 404 })
-    }
+      // 利用者情報を取得
+      const { data: client, error: clientError } = await supabase
+        .from('clients')
+        .select('id, name, facility_id')
+        .eq('id', clientId)
+        .single()
 
-    // 投稿者情報を取得
-    const { data: author, error: authorError } = await supabase
-      .from('users')
-      .select('id, display_name')
-      .eq('id', post.author_id)
-      .single()
+      if (clientError || !client) {
+        console.error('[push/notify][POST] Failed to fetch client:', clientError)
+        return NextResponse.json({ error: 'Client not found' }, { status: 404 })
+      }
 
-    if (authorError || !author) {
-      console.error('[push/notify][POST] Failed to fetch author:', authorError)
-      // 投稿者情報が取得できなくても通知は送信する（名前は「不明なユーザー」にする）
-    }
+      // 投稿者情報を取得
+      const { data: author, error: authorError } = await supabase
+        .from('users')
+        .select('id, display_name')
+        .eq('id', post.author_id)
+        .single()
 
-    const actorName = author?.display_name || '不明なユーザー'
-    const clientName = client.name
+      if (authorError || !author) {
+        console.error('[push/notify][POST] Failed to fetch author:', authorError)
+        // 投稿者情報が取得できなくても通知は送信する（名前は「不明なユーザー」にする）
+      }
 
-    // 通知ペイロードを作成
-    const payload = {
-      title: 'CareBridge Hub｜新着投稿',
-      body: `${actorName}さんが「${clientName}」さんのタイムラインに投稿しました`,
-      url: `/clients/${clientId}/timeline`,
+      const actorName = author?.display_name || '不明なユーザー'
+      const clientName = client.name
+
+      facilityId = client.facility_id
+      authorId = post.author_id
+      payload = {
+        title: 'CareBridge Hub｜新着投稿',
+        body: `${actorName}さんが「${clientName}」さんのタイムラインに投稿しました`,
+        url: `/clients/${clientId}/timeline`,
+      }
+    } else {
+      // グループ投稿
+      const { data: post, error: postError } = await supabase
+        .from('posts')
+        .select('id, author_id, group_id, body, created_at')
+        .eq('id', postId)
+        .eq('group_id', groupId)
+        .single()
+
+      if (postError || !post) {
+        console.error('[push/notify][POST] Failed to fetch post:', postError)
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+      }
+
+      const { data: group, error: groupError } = await supabase
+        .from('groups')
+        .select('id, name, facility_id')
+        .eq('id', groupId)
+        .single()
+
+      if (groupError || !group) {
+        console.error('[push/notify][POST] Failed to fetch group:', groupError)
+        return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+      }
+
+      const { data: author, error: authorError } = await supabase
+        .from('users')
+        .select('id, display_name')
+        .eq('id', post.author_id)
+        .single()
+
+      if (authorError || !author) {
+        console.error('[push/notify][POST] Failed to fetch author:', authorError)
+      }
+
+      const actorName = author?.display_name || '不明なユーザー'
+      const groupName = group.name
+
+      facilityId = group.facility_id
+      authorId = post.author_id
+      payload = {
+        title: 'CareBridge Hub｜新着投稿',
+        body: `${actorName}さんが「${groupName}」に投稿しました`,
+        url: `/groups/${groupId}`,
+      }
     }
 
     // VAPIDキーの確認（必須envチェック）
@@ -141,10 +213,10 @@ export async function POST(request: NextRequest) {
     }
 
     // 通知を送信
-    console.log('[push/notify][POST] Sending notifications to facility:', client.facility_id)
+    console.log('[push/notify][POST] Sending notifications to facility:', facilityId)
     const result = await sendPushNotificationsToFacility(
-      client.facility_id,
-      post.author_id,
+      facilityId,
+      authorId,
       payload
     )
 

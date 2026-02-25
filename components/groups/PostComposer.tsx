@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { Send } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { POST_SIDES } from '@/lib/constants'
-import { notifyNewPost } from '@/lib/utils/notifications'
 
 interface PostComposerProps {
   groupId: string
@@ -47,29 +46,29 @@ export default function PostComposer({
         return
       }
 
-      // 通知を送信（モック）
+      // Web Push通知を送信
       if (post) {
-        const { data: groupData } = await supabase
-          .from('groups')
-          .select('name, facility_id')
-          .eq('id', groupId)
-          .single()
+        try {
+          const response = await fetch('/api/push/notify', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              postId: post.id,
+              groupId: groupId,
+            }),
+          })
 
-        if (groupData) {
-          const { data: authorData } = await supabase
-            .from('users')
-            .select('display_name')
-            .eq('id', currentUserId)
-            .single()
-
-          await notifyNewPost(
-            post.id,
-            groupData.facility_id,
-            authorData?.display_name || '不明なユーザー',
-            content.trim(),
-            'group',
-            groupData.name
-          )
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}))
+            console.error('[PostComposer] Failed to send push notification:', errorData)
+          } else {
+            const result = await response.json()
+            console.log('[PostComposer] Push notification sent:', result)
+          }
+        } catch (error) {
+          console.error('[PostComposer] Error sending push notification:', error)
         }
       }
 
