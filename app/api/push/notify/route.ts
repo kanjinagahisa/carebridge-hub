@@ -11,17 +11,6 @@ export const runtime = 'nodejs'
 
 export async function POST(request: NextRequest) {
   try {
-    const pub = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
-    const pri = process.env.VAPID_PRIVATE_KEY ?? "";
-    console.log("[vapid-check]", {
-      pub_len: pub.length,
-      pub_head: pub.slice(0, 10),
-      pub_tail: pub.slice(-10),
-      pri_len: pri.length,
-      pri_head: pri.slice(0, 10),
-      pri_tail: pri.slice(-10),
-    });
-
     console.log('[push/notify][POST] start')
 
     // Cookie名一覧を取得（デバッグ用）
