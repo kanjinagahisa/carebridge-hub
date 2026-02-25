@@ -215,14 +215,16 @@ export default async function MenuPage() {
                   <UserPlus size={20} className="text-gray-600" />
                   <span className="text-gray-900">招待</span>
                 </Link>
-                <Link
-                  href={settingsFacilityId ? `/settings/facility?facility_id=${settingsFacilityId}` : "/settings/facility"}
-                  className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"
-                >
-                  <Settings size={20} className="text-gray-600" />
-                  <span className="text-gray-900">施設設定</span>
-                </Link>
               </>
+            )}
+            {(settingsFacilityId || latestFacilityId) && (
+              <Link
+                href={`/settings/facility?facility_id=${settingsFacilityId || latestFacilityId}`}
+                className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"
+              >
+                <Settings size={20} className="text-gray-600" />
+                <span className="text-gray-900">施設設定</span>
+              </Link>
             )}
             <Link
               href="/settings/notifications"
