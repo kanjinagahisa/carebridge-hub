@@ -136,6 +136,28 @@ export async function sendPushNotificationsToFacility(
 
     console.log(`[push] Sending notifications to ${subscriptions.length} subscribers`)
 
+    const markDeleted = async (id: string, reason: string, endpoint?: string) => {
+      const endpointTail = endpoint ? endpoint.slice(-12) : ''
+      const { error } = await adminSupabase
+        .from('push_subscriptions')
+        .update({ deleted: true })
+        .eq('id', id)
+
+      if (error) {
+        console.error('[push] Failed to mark subscription deleted:', {
+          id,
+          reason,
+          endpointTail,
+          error,
+        })
+        return false
+      }
+
+      console.log('[push] Marked subscription deleted:', { id, reason, endpointTail })
+      result.deleted++
+      return true
+    }
+
     // 各購読者に通知を送信
     const sendPromises = subscriptions.map(async (subscription) => {
       try {
@@ -153,17 +175,22 @@ export async function sendPushNotificationsToFacility(
         result.success++
         console.log(`[push] Successfully sent notification to user ${subscription.user_id}`)
       } catch (error: any) {
-        // 410 Gone または 404 Not Found の場合は購読情報を削除
+        const bodyText =
+          typeof error?.body === 'string' ? error.body : String(error?.body ?? '')
+
         if (error.statusCode === 410 || error.statusCode === 404) {
-          console.log(
-            `[push] Subscription expired (${error.statusCode}), deleting: ${subscription.endpoint}`
+          await markDeleted(
+            subscription.id,
+            `expired_${error.statusCode}`,
+            subscription.endpoint
           )
-          try {
-            await adminSupabase.from('push_subscriptions').delete().eq('id', subscription.id)
-            result.deleted++
-          } catch (deleteError) {
-            console.error('[push] Failed to delete expired subscription:', deleteError)
-          }
+        } else if (
+          error.statusCode === 403 &&
+          bodyText.includes(
+            'the VAPID credentials in the authorization header do not correspond to the credentials used to create the subscriptions.'
+          )
+        ) {
+          await markDeleted(subscription.id, 'vapid_mismatch_403', subscription.endpoint)
         } else {
           console.error(`[push] Failed to send notification to user ${subscription.user_id}:`, error)
           result.failed++
