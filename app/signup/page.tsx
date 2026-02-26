@@ -44,6 +44,30 @@ export default function SignupPage() {
       redirectTo: `${window.location.origin}/login`,
     })
 
+    // signUp前に既存/未確認を判定（未登録ならsignUpへ進む）
+    try {
+      const checkResponse = await fetch('/api/auth/check-existing-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: formData.email }),
+      })
+      if (checkResponse.ok) {
+        const checkData = await checkResponse.json()
+        if (checkData.exists && checkData.emailConfirmed) {
+          setError('このメールアドレスは既に登録されています。ログインしてください。')
+          setLoading(false)
+          return
+        }
+        if (checkData.exists && !checkData.emailConfirmed) {
+          setError('success')
+          setLoading(false)
+          return
+        }
+      }
+    } catch (_checkError) {
+      // 新規として続行
+    }
+
     // 1. 認証ユーザーを作成
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: formData.email,

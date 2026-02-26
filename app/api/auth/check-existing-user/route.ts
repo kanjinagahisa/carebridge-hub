@@ -18,19 +18,21 @@ export async function POST(request: NextRequest) {
 
     const adminSupabase = createAdminClient()
 
-    // auth.usersテーブルで既存ユーザーをチェック
-    const { data: existingAuthUser, error: authUserError } = await adminSupabase.auth.admin.listUsers()
+    // auth.usersテーブルで既存ユーザーをチェック（emailで1件検索）
+    const { data: existingUser, error: authUserError } = await adminSupabase
+      .schema('auth')
+      .from('users')
+      .select('id, email, email_confirmed_at, created_at')
+      .eq('email', email)
+      .maybeSingle()
 
     if (authUserError) {
-      console.error('[CheckExistingUser] Error fetching users:', authUserError)
+      console.error('[CheckExistingUser] Error fetching auth user:', authUserError)
       return NextResponse.json(
         { error: 'ユーザー確認中にエラーが発生しました' },
         { status: 500 }
       )
     }
-
-    // 指定されたメールアドレスで既存ユーザーを検索
-    const existingUser = existingAuthUser.users.find(user => user.email === email)
 
     if (existingUser) {
       // 既存ユーザーが見つかった場合、public.usersテーブルもチェック
