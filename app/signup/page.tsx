@@ -101,37 +101,6 @@ export default function SignupPage() {
         setLoading(false)
         return
       }
-      
-      // サーバー側APIで既存ユーザーをチェック
-      try {
-        const checkResponse = await fetch('/api/auth/check-existing-user', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ email: formData.email }),
-        })
-
-        if (!checkResponse.ok) {
-          console.error('[Signup] Failed to check existing user:', checkResponse.statusText)
-          // エラーが発生した場合でも、新規ユーザーとして処理を続行
-        } else {
-          const checkData = await checkResponse.json()
-          
-          console.log('[Signup] Checking existing user via API:', checkData)
-          
-          // 既存ユーザーが見つかった場合
-          if (checkData.exists) {
-            console.log('[Signup] Existing user detected via API')
-            setError('このメールアドレスは既に登録されています。ログインしてください。')
-            setLoading(false)
-            return
-          }
-        }
-      } catch (checkError) {
-        console.error('[Signup] Error checking existing user:', checkError)
-        // エラーが発生した場合でも、新規ユーザーとして処理を続行
-      }
     }
 
     // 2. Database Triggerが自動的にusersテーブルにレコードを作成するため、
