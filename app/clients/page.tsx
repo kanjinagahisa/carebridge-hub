@@ -25,11 +25,17 @@ export default async function ClientsPage() {
     
     t('[perf][clients] auth')
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
+    t('[perf][clients] auth.cookies_import')
     const { cookies } = await import('next/headers')
+    te('[perf][clients] auth.cookies_import')
+    t('[perf][clients] auth.cookies_read')
     const cookieStore = await cookies()
+    te('[perf][clients] auth.cookies_read')
+    t('[perf][clients] auth.cookies_filter')
     const authCookies = cookieStore.getAll().filter((cookie) => 
       cookie.name.includes('sb-') || cookie.name.includes('auth-token')
     )
+    te('[perf][clients] auth.cookies_filter')
     
     let user: any = null
     
@@ -49,10 +55,12 @@ export default async function ClientsPage() {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
               if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Attempting to set session from cookie')
+              t('[perf][clients] auth.setSession')
               const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
                 access_token: sessionData.access_token,
                 refresh_token: sessionData.refresh_token,
               })
+              te('[perf][clients] auth.setSession')
               if (setSessionError) {
                 console.error('[ClientsPage] Error setting session from cookie:', setSessionError.message)
               } else if (setSessionData?.user) {
@@ -61,7 +69,9 @@ export default async function ClientsPage() {
                 user = setSessionData.user
                 
                 // セッションが確実に確立されていることを確認
+                t('[perf][clients] auth.getSession_after_setSession')
                 const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                te('[perf][clients] auth.getSession_after_setSession')
                 if (sessionError) {
                   console.error('[ClientsPage] Error getting session after setSession:', sessionError.message)
                 } else if (session) {
@@ -80,10 +90,12 @@ export default async function ClientsPage() {
     
     // setSession()でuserが取得できなかった場合のみgetUser()を試みる
     if (!user) {
+      t('[perf][clients] auth.getUser_fallback')
       const {
         data: { user: getUserResult },
         error: getUserError,
       } = await supabase.auth.getUser()
+      te('[perf][clients] auth.getUser_fallback')
 
       if (process.env.NODE_ENV !== 'production') {
         console.log('[ClientsPage] getUser result:', {
