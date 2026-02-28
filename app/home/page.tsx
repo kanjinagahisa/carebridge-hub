@@ -22,6 +22,10 @@ export default async function HomePage({
   searchParams?: Promise<{ facility_id?: string }> | { facility_id?: string }
 }) {
   console.log('[HomePage] Starting...')
+  const perf = process.env.PERF_LOG === '1'
+  const t = (label: string) => perf && console.time(label)
+  const te = (label: string) => perf && console.timeEnd(label)
+  t('[perf][home] total')
   // searchParamsがPromiseの場合は解決する（Next.js 15対応）
   const resolvedSearchParams = searchParams instanceof Promise ? await searchParams : searchParams
   const requestedFacilityId = resolvedSearchParams?.facility_id
@@ -30,9 +34,12 @@ export default async function HomePage({
   }
 
   try {
+    t('[perf][home] createClient')
     const supabase = await createClient()
+    te('[perf][home] createClient')
     console.log('[HomePage] Supabase client created')
 
+    t('[perf][home] auth')
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
@@ -94,6 +101,7 @@ export default async function HomePage({
 
       user = getUserResult
     }
+    te('[perf][home] auth')
 
     console.log('[HomePage] User authenticated:', user.id, user.email)
 
@@ -102,6 +110,7 @@ export default async function HomePage({
 
     // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
     console.log('[HomePage] Fetching user facilities with admin client...')
+    t('[perf][home] ufr')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id, created_at, facilities(name)')
@@ -109,6 +118,7 @@ export default async function HomePage({
       .eq('deleted', false)
       .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
+    te('[perf][home] ufr')
     if (facilitiesError) {
       console.error('[HomePage] Error fetching user facilities with admin client:', facilitiesError)
     }
@@ -161,6 +171,7 @@ export default async function HomePage({
       redirect('/setup/choose')
     }
 
+    t('[perf][home] current_facility_restore')
     // ✅ 保険A：current_facility_id が空/ズレていても home 初回ロードで自動復旧
     // Pushトグルは users.current_facility_id を見るため、ここで確実に整える
     try {
@@ -189,8 +200,10 @@ export default async function HomePage({
     } catch (e) {
       console.warn('[HomePage] current_facility restore exception:', e)
     }
+    te('[perf][home] current_facility_restore')
 
     // 自施設の全グループを取得（最新の施設のグループのみ）
+    t('[perf][home] groups')
     console.log('[HomePage] Fetching groups for latest facility:', selectedFacilityId)
     const { data: groups, error: groupsError } = await adminSupabase
       .from('groups')
@@ -198,12 +211,14 @@ export default async function HomePage({
       .eq('facility_id', selectedFacilityId)
       .eq('deleted', false)
 
+    te('[perf][home] groups')
     if (groupsError) {
       console.error('[HomePage] Error fetching groups with admin client:', groupsError)
     }
     const groupIds = groups?.map((g) => g.id) || []
 
     // 自施設の全クライアントを取得（最新の施設のクライアントのみ）
+    t('[perf][home] clients')
     console.log('[HomePage] Fetching clients for latest facility:', selectedFacilityId)
     const { data: clients, error: clientsError } = await adminSupabase
       .from('clients')
@@ -211,6 +226,7 @@ export default async function HomePage({
       .eq('facility_id', selectedFacilityId)
       .eq('deleted', false)
 
+    te('[perf][home] clients')
     if (clientsError) {
       console.error('[HomePage] Error fetching clients with admin client:', clientsError)
     }
@@ -227,6 +243,7 @@ export default async function HomePage({
     })[] = []
 
     if (groupIds.length > 0 || clientIds.length > 0) {
+      t('[perf][home] posts')
       console.log('[HomePage] Fetching recent posts for groups and clients...')
       const { data: posts, error: postsError } = await adminSupabase
         .from('posts')
@@ -248,19 +265,23 @@ export default async function HomePage({
           ...post,
           postType: post.group_id ? 'group' : 'client',
         })) || []
+        te('[perf][home] posts')
 
         // いいね数と既読数を取得
         if (recentPosts.length > 0) {
+          t('[perf][home] reactions')
           const postIds = recentPosts.map((p) => p.id)
           const { data: reactions } = await adminSupabase
             .from('post_reactions')
             .select('post_id, type')
             .in('post_id', postIds)
-
+          te('[perf][home] reactions')
+          t('[perf][home] reads')
           const { data: reads } = await adminSupabase
             .from('post_reads')
             .select('post_id, user_id')
             .in('post_id', postIds)
+          te('[perf][home] reads')
 
           // 投稿にリアクションと既読情報を追加
           recentPosts = recentPosts.map((post) => {
@@ -279,6 +300,7 @@ export default async function HomePage({
 
     // 未読メッセージ数を取得
     let unreadCount = 0
+    t('[perf][home] unread_count')
     if (groupIds.length > 0 || clientIds.length > 0) {
       const { data: unreadGroupPosts } = await adminSupabase
         .from('posts')
@@ -296,6 +318,7 @@ export default async function HomePage({
 
       unreadCount = (unreadGroupPosts?.length || 0) + (unreadClientPosts?.length || 0)
     }
+    te('[perf][home] unread_count')
 
     console.log('[HomePage] Rendering with:', {
       groupsCount: groups?.length || 0,
@@ -304,6 +327,7 @@ export default async function HomePage({
       unreadCount,
     })
 
+    te('[perf][home] total')
     return (
       <div className="min-h-screen bg-gray-100 pb-20">
         <Header title="ホーム" facilityName={facilityName || undefined} />

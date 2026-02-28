@@ -12,11 +12,18 @@ export const dynamic = 'force-dynamic'
  */
 export default async function ClientsPage() {
   if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Starting...')
+  const perf = process.env.PERF_LOG === '1'
+  const t = (label: string) => perf && console.time(label)
+  const te = (label: string) => perf && console.timeEnd(label)
+  t('[perf][clients] total')
 
   try {
+    t('[perf][clients] createClient')
     const supabase = await createClient()
+    te('[perf][clients] createClient')
     if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Supabase client created')
     
+    t('[perf][clients] auth')
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
@@ -90,6 +97,7 @@ export default async function ClientsPage() {
         user = getUserResult
       }
     }
+    te('[perf][clients] auth')
 
     if (!user) {
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No user found, returning null')
@@ -111,6 +119,7 @@ export default async function ClientsPage() {
     
     // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
     if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching user facilities with admin client...')
+    t('[perf][clients] ufr')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id, created_at, facilities(name)')
@@ -118,6 +127,7 @@ export default async function ClientsPage() {
       .eq('deleted', false)
       .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
+    te('[perf][clients] ufr')
     if (process.env.NODE_ENV !== 'production') {
       console.log('[ClientsPage] User facilities result:', {
         hasError: !!facilitiesError,
@@ -156,6 +166,7 @@ export default async function ClientsPage() {
     let clientsError: any = null
 
     if (latestFacilityId) {
+      t('[perf][clients] clients_select')
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching clients for latest facility:', latestFacilityId)
       // adminSupabaseを使用してRLSをバイパス
       const { data, error } = await adminSupabase
@@ -178,6 +189,7 @@ export default async function ClientsPage() {
           })
         }
       }
+      te('[perf][clients] clients_select')
     } else {
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No latest facility ID found, skipping clients fetch')
     }
@@ -188,6 +200,7 @@ export default async function ClientsPage() {
     let unreadCountsMap: Record<string, number> = {}
 
     if (clientIds.length > 0 && user) {
+      t('[perf][clients] latest_posts')
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching latest posts and unread counts for clients')
       
       // 各利用者の最新投稿を取得
@@ -214,8 +227,10 @@ export default async function ClientsPage() {
         })
         clientPostsMap = postsByClient
       }
+      te('[perf][clients] latest_posts')
 
       // 未読数を取得
+      t('[perf][clients] unread_posts')
       const { data: unreadPosts } = await adminSupabase
         .from('posts')
         .select('id, client_id')
@@ -233,6 +248,7 @@ export default async function ClientsPage() {
         })
         unreadCountsMap = counts
       }
+      te('[perf][clients] unread_posts')
     }
 
     if (process.env.NODE_ENV !== 'production') {
@@ -245,6 +261,7 @@ export default async function ClientsPage() {
       })
     }
 
+    te('[perf][clients] total')
     return (
       <ClientsListClient
         initialClients={clients}
