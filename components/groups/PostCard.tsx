@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Heart, Eye, X, FileText, Video, Download } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { PROFESSION_LABELS } from '@/lib/constants'
 import type { Post } from '@/types/carebridge'
 import { format } from 'date-fns'
 import { ja } from 'date-fns/locale/ja'
@@ -146,7 +147,7 @@ export default function PostCard({
             {post.author?.display_name || '不明'}
           </p>
           {post.author?.profession && (
-            <p className="text-xs text-gray-500">{post.author.profession}</p>
+            <p className="text-xs text-gray-500">{PROFESSION_LABELS[post.author.profession] ?? post.author.profession}</p>
           )}
         </div>
         <p className="text-xs text-gray-500">{formattedDate}</p>

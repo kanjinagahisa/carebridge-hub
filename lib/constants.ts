@@ -19,6 +19,7 @@ export const FACILITY_TYPE_LABELS: Record<string, string> = {
 export const PROFESSIONS = {
   MANAGER: 'manager',
   CHILD_DEV_MANAGER: 'child_dev_manager',
+  NURSERY_TEACHER: 'nursery_teacher',
   CARE_WORKER: 'care_worker',
   NURSE: 'nurse',
   PT: 'pt',
@@ -31,6 +32,7 @@ export const PROFESSIONS = {
 export const PROFESSION_LABELS: Record<string, string> = {
   [PROFESSIONS.MANAGER]: '管理者',
   [PROFESSIONS.CHILD_DEV_MANAGER]: '児童発達支援管理責任者',
+  [PROFESSIONS.NURSERY_TEACHER]: '保育士',
   [PROFESSIONS.CARE_WORKER]: '介護士',
   [PROFESSIONS.NURSE]: '看護師',
   [PROFESSIONS.PT]: 'PT（理学療法士）',
