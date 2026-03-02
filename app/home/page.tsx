@@ -241,15 +241,12 @@ export default async function HomePage({
         // いいね数と既読数を取得
         if (recentPosts.length > 0) {
           const postIds = recentPosts.map((p) => p.id)
-          const { data: reactions } = await adminSupabase
-            .from('post_reactions')
-            .select('post_id, type')
-            .in('post_id', postIds)
-
-          const { data: reads } = await adminSupabase
-            .from('post_reads')
-            .select('post_id, user_id')
-            .in('post_id', postIds)
+          const [reactionsRes, readsRes] = await Promise.all([
+            adminSupabase.from('post_reactions').select('post_id, type').in('post_id', postIds),
+            adminSupabase.from('post_reads').select('post_id, user_id').in('post_id', postIds),
+          ])
+          const reactions = reactionsRes.data
+          const reads = readsRes.data
 
           // 投稿にリアクションと既読情報を追加
           recentPosts = recentPosts.map((post) => {
