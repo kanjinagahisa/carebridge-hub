@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { perf } from '@/lib/perf'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { Bell, Bookmark, Eye } from 'lucide-react'
@@ -34,9 +33,7 @@ export default async function HomePage({
     const supabase = await createClient()
     console.log('[HomePage] Supabase client created')
 
-    return await perf('home:total', async () => {
     let user: any = null
-    await perf('home:auth', async () => {
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
@@ -93,7 +90,6 @@ export default async function HomePage({
 
       user = getUserResult
     }
-    })
 
     console.log('[HomePage] User authenticated', { hasUser: true })
 
@@ -102,14 +98,12 @@ export default async function HomePage({
 
     // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
     console.log('[HomePage] Fetching user facilities with admin client...')
-    const { data: userFacilities, error: facilitiesError } = await perf('home:ufr', async () => {
-      return adminSupabase
-        .from('user_facility_roles')
-        .select('facility_id, created_at, facilities(name)')
-        .eq('user_id', user.id)
-        .eq('deleted', false)
-        .order('created_at', { ascending: false }) // 最新の施設を最初に取得
-    })
+    const { data: userFacilities, error: facilitiesError } = await adminSupabase
+      .from('user_facility_roles')
+      .select('facility_id, created_at, facilities(name)')
+      .eq('user_id', user.id)
+      .eq('deleted', false)
+      .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
     if (facilitiesError) {
       console.error('[HomePage] Error fetching user facilities with admin client:', facilitiesError)
@@ -189,13 +183,11 @@ export default async function HomePage({
 
     // 自施設の全グループを取得（最新の施設のグループのみ）
     console.log('[HomePage] Fetching groups for latest facility:', selectedFacilityId)
-    const { data: groups, error: groupsError } = await perf('home:groups', async () => {
-      return adminSupabase
-        .from('groups')
-        .select('id')
-        .eq('facility_id', selectedFacilityId)
-        .eq('deleted', false)
-    })
+    const { data: groups, error: groupsError } = await adminSupabase
+      .from('groups')
+      .select('id')
+      .eq('facility_id', selectedFacilityId)
+      .eq('deleted', false)
     if (groupsError) {
       console.error('[HomePage] Error fetching groups with admin client:', groupsError)
     }
@@ -203,13 +195,11 @@ export default async function HomePage({
 
     // 自施設の全クライアントを取得（最新の施設のクライアントのみ）
     console.log('[HomePage] Fetching clients for latest facility:', selectedFacilityId)
-    const { data: clients, error: clientsError } = await perf('home:clients', async () => {
-      return adminSupabase
-        .from('clients')
-        .select('id, name')
-        .eq('facility_id', selectedFacilityId)
-        .eq('deleted', false)
-    })
+    const { data: clients, error: clientsError } = await adminSupabase
+      .from('clients')
+      .select('id, name')
+      .eq('facility_id', selectedFacilityId)
+      .eq('deleted', false)
     if (clientsError) {
       console.error('[HomePage] Error fetching clients with admin client:', clientsError)
     }
@@ -227,20 +217,18 @@ export default async function HomePage({
 
     if (groupIds.length > 0 || clientIds.length > 0) {
       console.log('[HomePage] Fetching recent posts for groups and clients...')
-      const { data: posts, error: postsError } = await perf('home:posts', async () => {
-        return adminSupabase
-          .from('posts')
-          .select(`
+      const { data: posts, error: postsError } = await adminSupabase
+        .from('posts')
+        .select(`
           *,
           groups(name),
           clients(name),
           author:users(display_name)
         `)
-          .or(`group_id.in.(${groupIds.join(',')}),client_id.in.(${clientIds.join(',')})`)
-          .eq('deleted', false)
-          .order('created_at', { ascending: false })
-          .limit(30)
-      })
+        .or(`group_id.in.(${groupIds.join(',')}),client_id.in.(${clientIds.join(',')})`)
+        .eq('deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(30)
 
       if (postsError) {
         console.error('[HomePage] Error fetching posts with admin client:', postsError)
@@ -253,16 +241,15 @@ export default async function HomePage({
         // いいね数と既読数を取得
         if (recentPosts.length > 0) {
           const postIds = recentPosts.map((p) => p.id)
-          const [reactionsRes, readsRes] = await Promise.all([
-            perf('home:reactions', async () =>
-              adminSupabase.from('post_reactions').select('post_id, type').in('post_id', postIds)
-            ),
-            perf('home:reads', async () =>
-              adminSupabase.from('post_reads').select('post_id, user_id').in('post_id', postIds)
-            ),
-          ])
-          const reactions = reactionsRes.data
-          const reads = readsRes.data
+          const { data: reactions } = await adminSupabase
+            .from('post_reactions')
+            .select('post_id, type')
+            .in('post_id', postIds)
+
+          const { data: reads } = await adminSupabase
+            .from('post_reads')
+            .select('post_id, user_id')
+            .in('post_id', postIds)
 
           // 投稿にリアクションと既読情報を追加
           recentPosts = recentPosts.map((post) => {
@@ -282,23 +269,21 @@ export default async function HomePage({
     // 未読メッセージ数を取得
     let unreadCount = 0
     if (groupIds.length > 0 || clientIds.length > 0) {
-      unreadCount = await perf('home:unread_count', async () => {
-        const [unreadGroupRes, unreadClientRes] = await Promise.all([
-          adminSupabase
-            .from('posts')
-            .select('id')
-            .in('group_id', groupIds)
-            .eq('deleted', false)
-            .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`),
-          adminSupabase
-            .from('posts')
-            .select('id')
-            .in('client_id', clientIds)
-            .eq('deleted', false)
-            .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`),
-        ])
-        return (unreadGroupRes.data?.length || 0) + (unreadClientRes.data?.length || 0)
-      })
+      const [unreadGroupRes, unreadClientRes] = await Promise.all([
+        adminSupabase
+          .from('posts')
+          .select('id')
+          .in('group_id', groupIds)
+          .eq('deleted', false)
+          .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`),
+        adminSupabase
+          .from('posts')
+          .select('id')
+          .in('client_id', clientIds)
+          .eq('deleted', false)
+          .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`),
+      ])
+      unreadCount = (unreadGroupRes.data?.length || 0) + (unreadClientRes.data?.length || 0)
     }
 
     console.log('[HomePage] Rendering with:', {
@@ -390,7 +375,6 @@ export default async function HomePage({
         </div>
       </div>
     )
-  })
   } catch (error) {
     console.error('[HomePage] Unexpected error:', error)
     redirect('/login')
