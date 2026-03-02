@@ -39,9 +39,6 @@ export default function StaffManagementCard({
                 <p className="font-medium text-gray-900">
                   {member.users?.display_name || '不明なユーザー'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {member.users?.email || ''}
-                </p>
               </div>
               <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded-full">
                 {ROLE_LABELS[member.role] || member.role}
