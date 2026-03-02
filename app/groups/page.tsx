@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { perf } from '@/lib/perf'
 import GroupList from '@/components/groups/GroupList'
 import type { Group } from '@/types/carebridge'
 import { ROLES } from '@/lib/constants'
@@ -19,9 +18,7 @@ export default async function GroupsPage() {
     const supabase = await createClient()
     if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Supabase client created')
 
-    return await perf('groups:total', async () => {
     let user: any = null
-    await perf('groups:auth', async () => {
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
@@ -85,7 +82,6 @@ export default async function GroupsPage() {
         user = getUserResult
       }
     }
-    })
 
     if (!user) {
       if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] No user found, returning login required message')
@@ -143,14 +139,12 @@ export default async function GroupsPage() {
     if (facilityIds.length > 0) {
       if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetching groups for facilities', { facilityIdsCount: facilityIds.length })
       // adminSupabaseクライアントを使用してRLSをバイパスし、確実にグループを取得
-      const { data, error } = await perf('groups:queryList', async () => {
-        return adminSupabase
-          .from('groups')
-          .select('*')
-          .in('facility_id', facilityIds)
-          .eq('deleted', false)
-          .order('updated_at', { ascending: false })
-      }, { count: facilityIds.length })
+      const { data, error } = await adminSupabase
+        .from('groups')
+        .select('*')
+        .in('facility_id', facilityIds)
+        .eq('deleted', false)
+        .order('updated_at', { ascending: false })
 
       if (error) {
         console.error('[GroupsPage] Error fetching groups with admin client:', error)
@@ -208,7 +202,6 @@ export default async function GroupsPage() {
         </div>
       </div>
     )
-  })
   } catch (error) {
     console.error('[GroupsPage] Unexpected error in Server Component:', error)
     return (
