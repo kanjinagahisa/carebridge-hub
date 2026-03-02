@@ -52,6 +52,16 @@ export default async function ClientsPage() {
                 if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session set from cookie successfully', { hasUser: true })
                 // setSession()の結果から直接userを取得
                 user = setSessionData.user
+                
+                // セッションが確実に確立されていることを確認
+                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+                if (sessionError) {
+                  console.error('[ClientsPage] Error getting session after setSession:', sessionError.message)
+                } else if (session) {
+                  if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session confirmed after setSession:', { hasUser: !!session?.user })
+                } else {
+                  console.warn('[ClientsPage] No session found after setSession, but user exists')
+                }
               }
             }
           }
