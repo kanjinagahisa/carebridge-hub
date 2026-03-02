@@ -147,8 +147,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/auth/forgot-password') ||
     request.nextUrl.pathname.startsWith('/auth/reset-password')
 
-  // セッションが設定できなかった場合、getSession()とgetUser()を試す
-  if (!finalUser) {
+  // セッションが設定できなかった場合、getSession()とgetUser()を試す（Supabase auth cookie が1つも無い場合はスキップし未ログインとして扱う）
+  if (!finalUser && authCookies.length > 0) {
     const { data: { session }, error: sessionError } = await supabase.auth.getSession()
     
     // パブリックパスでない場合のみ詳細ログを出力
@@ -185,8 +185,12 @@ export async function updateSession(request: NextRequest) {
       
       // 未認証でもアクセス可能なパスの場合、エラーログを出力しない
       if (getUserError && !isPublicPath) {
-        console.error('[Middleware] Error getting user:', getUserError.message)
-        console.error('[Middleware] Error details:', getUserError)
+        if (getUserError.message && String(getUserError.message).includes('Auth session missing!')) {
+          console.warn('[Middleware] Auth session missing (not logged in)')
+        } else {
+          console.error('[Middleware] Error getting user:', getUserError.message)
+          console.error('[Middleware] Error details:', getUserError)
+        }
       }
       
       finalUser = user || null
@@ -196,8 +200,12 @@ export async function updateSession(request: NextRequest) {
   // セッション取得の結果をログに出力
   // 未認証でもアクセス可能なパスの場合、エラーログを出力しない
   if (getUserError && !isPublicPath) {
-    console.error('[Middleware] Error getting user:', getUserError.message)
-    console.error('[Middleware] Error details:', getUserError)
+    if (getUserError.message && String(getUserError.message).includes('Auth session missing!')) {
+      console.warn('[Middleware] Auth session missing (not logged in)')
+    } else {
+      console.error('[Middleware] Error getting user:', getUserError.message)
+      console.error('[Middleware] Error details:', getUserError)
+    }
   } else if (finalUser) {
     if (process.env.NODE_ENV !== 'production') console.log('[Middleware] User authenticated:', finalUser.id, finalUser.email)
   } else {

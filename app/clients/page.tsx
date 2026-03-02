@@ -201,21 +201,31 @@ export default async function ClientsPage() {
 
     if (clientIds.length > 0 && user) {
       t('[perf][clients] latest_posts')
+      t('[perf][clients] unread_posts')
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching latest posts and unread counts for clients')
       
-      // 各利用者の最新投稿を取得
-      const { data: latestPosts } = await adminSupabase
-        .from('posts')
-        .select(`
+      const [latestPostsResult, unreadPostsResult] = await Promise.all([
+        adminSupabase
+          .from('posts')
+          .select(`
           id,
           client_id,
           body,
           created_at,
           author:users(display_name)
         `)
-        .in('client_id', clientIds)
-        .eq('deleted', false)
-        .order('created_at', { ascending: false })
+          .in('client_id', clientIds)
+          .eq('deleted', false)
+          .order('created_at', { ascending: false }),
+        adminSupabase
+          .from('posts')
+          .select('id, client_id')
+          .in('client_id', clientIds)
+          .eq('deleted', false)
+          .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`),
+      ])
+      const latestPosts = latestPostsResult.data
+      const unreadPosts = unreadPostsResult.data
 
       // 利用者ごとに最新投稿をグループ化
       if (latestPosts) {
@@ -228,15 +238,6 @@ export default async function ClientsPage() {
         clientPostsMap = postsByClient
       }
       te('[perf][clients] latest_posts')
-
-      // 未読数を取得
-      t('[perf][clients] unread_posts')
-      const { data: unreadPosts } = await adminSupabase
-        .from('posts')
-        .select('id, client_id')
-        .in('client_id', clientIds)
-        .eq('deleted', false)
-        .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`)
 
       // 利用者ごとに未読数を集計
       if (unreadPosts) {
