@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { perf } from '@/lib/perf'
 import ClientsListClient from './ClientsListClient'
 import type { Client } from '@/types/carebridge'
 
@@ -12,32 +13,19 @@ export const dynamic = 'force-dynamic'
  */
 export default async function ClientsPage() {
   if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Starting...')
-  const perf = process.env.PERF_LOG === '1'
-  const t = (label: string) => perf && console.time(label)
-  const te = (label: string) => perf && console.timeEnd(label)
-  t('[perf][clients] total')
 
   try {
-    t('[perf][clients] createClient')
     const supabase = await createClient()
-    te('[perf][clients] createClient')
     if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Supabase client created')
-    
-    t('[perf][clients] auth')
+
+    let user: any = null
+    await perf('clients:getSession', async () => {
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
-    t('[perf][clients] auth.cookies_import')
     const { cookies } = await import('next/headers')
-    te('[perf][clients] auth.cookies_import')
-    t('[perf][clients] auth.cookies_read')
     const cookieStore = await cookies()
-    te('[perf][clients] auth.cookies_read')
-    t('[perf][clients] auth.cookies_filter')
-    const authCookies = cookieStore.getAll().filter((cookie) => 
+    const authCookies = cookieStore.getAll().filter((cookie) =>
       cookie.name.includes('sb-') || cookie.name.includes('auth-token')
     )
-    te('[perf][clients] auth.cookies_filter')
-    
-    let user: any = null
     
     if (authCookies.length > 0) {
       const authTokenCookie = authCookies.find(c => c.name.includes('auth-token'))
@@ -55,12 +43,10 @@ export default async function ClientsPage() {
             const sessionData = JSON.parse(cookieValue)
             if (sessionData.access_token && sessionData.refresh_token) {
               if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Attempting to set session from cookie')
-              t('[perf][clients] auth.setSession')
               const { data: setSessionData, error: setSessionError } = await supabase.auth.setSession({
                 access_token: sessionData.access_token,
                 refresh_token: sessionData.refresh_token,
               })
-              te('[perf][clients] auth.setSession')
               if (setSessionError) {
                 console.error('[ClientsPage] Error setting session from cookie:', setSessionError.message)
               } else if (setSessionData?.user) {
@@ -78,12 +64,10 @@ export default async function ClientsPage() {
     
     // setSession()でuserが取得できなかった場合のみgetUser()を試みる
     if (!user && authCookies.length === 0) {
-      t('[perf][clients] auth.getUser_fallback')
       const {
         data: { user: getUserResult },
         error: getUserError,
       } = await supabase.auth.getUser()
-      te('[perf][clients] auth.getUser_fallback')
 
       if (process.env.NODE_ENV !== 'production') {
         console.log('[ClientsPage] getUser result:', {
@@ -97,7 +81,7 @@ export default async function ClientsPage() {
         user = getUserResult
       }
     }
-    te('[perf][clients] auth')
+    })
 
     if (!user) {
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No user found, returning null')
@@ -119,7 +103,6 @@ export default async function ClientsPage() {
     
     // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
     if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching user facilities with admin client...')
-    t('[perf][clients] ufr')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('facility_id, created_at, facilities(name)')
@@ -127,7 +110,6 @@ export default async function ClientsPage() {
       .eq('deleted', false)
       .order('created_at', { ascending: false }) // 最新の施設を最初に取得
 
-    te('[perf][clients] ufr')
     if (process.env.NODE_ENV !== 'production') {
       console.log('[ClientsPage] User facilities result:', {
         hasError: !!facilitiesError,
@@ -166,15 +148,16 @@ export default async function ClientsPage() {
     let clientsError: any = null
 
     if (latestFacilityId) {
-      t('[perf][clients] clients_select')
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching clients for latest facility:', latestFacilityId)
       // adminSupabaseを使用してRLSをバイパス
-      const { data, error } = await adminSupabase
-        .from('clients')
-        .select('*')
-        .eq('facility_id', latestFacilityId)
-        .eq('deleted', false)
-        .order('name', { ascending: true })
+      const { data, error } = await perf('clients:queryList', async () => {
+        return adminSupabase
+          .from('clients')
+          .select('*')
+          .eq('facility_id', latestFacilityId)
+          .eq('deleted', false)
+          .order('name', { ascending: true })
+      })
 
       if (error) {
         console.error('[ClientsPage] Error fetching clients:', error)
@@ -189,7 +172,6 @@ export default async function ClientsPage() {
           })
         }
       }
-      te('[perf][clients] clients_select')
     } else {
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No latest facility ID found, skipping clients fetch')
     }
@@ -200,8 +182,6 @@ export default async function ClientsPage() {
     let unreadCountsMap: Record<string, number> = {}
 
     if (clientIds.length > 0 && user) {
-      t('[perf][clients] latest_posts')
-      t('[perf][clients] unread_posts')
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching latest posts and unread counts for clients')
       
       const [latestPostsResult, unreadPostsResult] = await Promise.all([
@@ -237,7 +217,6 @@ export default async function ClientsPage() {
         })
         clientPostsMap = postsByClient
       }
-      te('[perf][clients] latest_posts')
 
       // 利用者ごとに未読数を集計
       if (unreadPosts) {
@@ -249,7 +228,6 @@ export default async function ClientsPage() {
         })
         unreadCountsMap = counts
       }
-      te('[perf][clients] unread_posts')
     }
 
     if (process.env.NODE_ENV !== 'production') {
@@ -262,7 +240,6 @@ export default async function ClientsPage() {
       })
     }
 
-    te('[perf][clients] total')
     return (
       <ClientsListClient
         initialClients={clients}
