@@ -52,16 +52,6 @@ export default async function ClientsPage() {
                 if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session set from cookie successfully', { hasUser: true })
                 // setSession()の結果から直接userを取得
                 user = setSessionData.user
-                
-                // セッションが確実に確立されていることを確認
-                const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-                if (sessionError) {
-                  console.error('[ClientsPage] Error getting session after setSession:', sessionError.message)
-                } else if (session) {
-                  if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session confirmed after setSession:', { hasUser: !!session?.user })
-                } else {
-                  console.warn('[ClientsPage] No session found after setSession, but user exists')
-                }
               }
             }
           }
@@ -178,19 +168,28 @@ export default async function ClientsPage() {
     if (clientIds.length > 0 && user) {
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching latest posts and unread counts for clients')
       
-      // 各利用者の最新投稿を取得
-      const { data: latestPosts } = await adminSupabase
-        .from('posts')
-        .select(`
+      const [latestPostsResult, unreadPostsResult] = await Promise.all([
+        adminSupabase
+          .from('posts')
+          .select(`
           id,
           client_id,
           body,
           created_at,
           author:users(display_name)
         `)
-        .in('client_id', clientIds)
-        .eq('deleted', false)
-        .order('created_at', { ascending: false })
+          .in('client_id', clientIds)
+          .eq('deleted', false)
+          .order('created_at', { ascending: false }),
+        adminSupabase
+          .from('posts')
+          .select('id, client_id')
+          .in('client_id', clientIds)
+          .eq('deleted', false)
+          .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`),
+      ])
+      const latestPosts = latestPostsResult.data
+      const unreadPosts = unreadPostsResult.data
 
       // 利用者ごとに最新投稿をグループ化
       if (latestPosts) {
@@ -202,14 +201,6 @@ export default async function ClientsPage() {
         })
         clientPostsMap = postsByClient
       }
-
-      // 未読数を取得
-      const { data: unreadPosts } = await adminSupabase
-        .from('posts')
-        .select('id, client_id')
-        .in('client_id', clientIds)
-        .eq('deleted', false)
-        .not('id', 'in', `(SELECT post_id FROM post_reads WHERE user_id = '${user.id}')`)
 
       // 利用者ごとに未読数を集計
       if (unreadPosts) {
