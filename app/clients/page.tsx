@@ -1,6 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { perf } from '@/lib/perf'
 import ClientsListClient from './ClientsListClient'
 import type { Client } from '@/types/carebridge'
 
@@ -18,15 +17,14 @@ export default async function ClientsPage() {
     const supabase = await createClient()
     if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Supabase client created')
 
-    return await perf('clients:total', async () => {
-    let user: any = null
-    await perf('clients:auth', async () => {
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
-    const authCookies = cookieStore.getAll().filter((cookie) =>
+    const authCookies = cookieStore.getAll().filter((cookie) => 
       cookie.name.includes('sb-') || cookie.name.includes('auth-token')
     )
+    
+    let user: any = null
     
     if (authCookies.length > 0) {
       const authTokenCookie = authCookies.find(c => c.name.includes('auth-token'))
@@ -82,7 +80,6 @@ export default async function ClientsPage() {
         user = getUserResult
       }
     }
-    })
 
     if (!user) {
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No user found, returning null')
@@ -101,7 +98,7 @@ export default async function ClientsPage() {
     // そのため、adminSupabaseを使用してRLSをバイパスする
     // （ミドルウェアと同じ方法）
     const adminSupabase = createAdminClient()
-    
+
     // ユーザーの所属施設を取得（最新の施設を優先的に表示するため、created_atで降順にソート）
     if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching user facilities with admin client...')
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
@@ -143,14 +140,12 @@ export default async function ClientsPage() {
     if (latestFacilityId) {
       if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching clients for latest facility:', latestFacilityId)
       // adminSupabaseを使用してRLSをバイパス
-      const { data, error } = await perf('clients:queryList', async () => {
-        return adminSupabase
-          .from('clients')
-          .select('*')
-          .eq('facility_id', latestFacilityId)
-          .eq('deleted', false)
-          .order('name', { ascending: true })
-      })
+      const { data, error } = await adminSupabase
+        .from('clients')
+        .select('*')
+        .eq('facility_id', latestFacilityId)
+        .eq('deleted', false)
+        .order('name', { ascending: true })
 
       if (error) {
         console.error('[ClientsPage] Error fetching clients:', error)
@@ -238,7 +233,6 @@ export default async function ClientsPage() {
         currentUserId={user.id}
       />
     )
-  })
   } catch (error) {
     console.error('[ClientsPage] Unexpected error:', error)
     return (
