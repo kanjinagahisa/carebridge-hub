@@ -50,8 +50,8 @@ export default async function SetupChoosePage() {
                 )
               } else if (setSessionData?.user) {
                 if (process.env.NODE_ENV !== "production") console.log(
-                  '[SetupChoosePage] Session set from cookie successfully, user:',
-                  setSessionData.user.email
+                  '[SetupChoosePage] Session set from cookie successfully',
+                  { hasUser: true }
                 )
                 user = setSessionData.user
               }
@@ -116,7 +116,7 @@ export default async function SetupChoosePage() {
       user = getUserResult
     }
 
-    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User authenticated', { hasUser: true })
 
     // ログイン済みの場合、既に施設に所属しているかチェック
     const adminSupabase = createAdminClient()
@@ -142,7 +142,7 @@ export default async function SetupChoosePage() {
       if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] REDIRECT CONDITION MET')
       if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User already has facilities, redirecting to home')
       if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User ID:', user.id)
-      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User Email:', user.email)
+      if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] User Email', { hasUser: !!user })
       if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] Facility IDs:', JSON.stringify(facilityIds))
       if (process.env.NODE_ENV !== "production") console.log('[SetupChoosePage] About to call redirect("/home")')
       // redirect()は例外を投げるため、try-catchでキャッチされないように注意

@@ -39,7 +39,7 @@ export default function SetupCreatePage() {
         error: getUserError,
       } = await supabase.auth.getUser()
 
-      if (process.env.NODE_ENV !== "production") console.log('User check:', { user: user ? { id: user.id, email: user.email } : 'null', getUserError })
+      if (process.env.NODE_ENV !== "production") console.log('User check', { hasUser: !!user, hasId: !!user?.id, getUserError })
 
       if (!user) {
         console.error('No user found:', { sessionError, getUserError })
@@ -74,9 +74,9 @@ export default function SetupCreatePage() {
         }
       }
 
-      if (process.env.NODE_ENV !== "production") console.log('Ready to create facility:', {
+      if (process.env.NODE_ENV !== "production") console.log('Ready to create facility', {
         userId: user.id,
-        email: user.email,
+        hasUser: !!user,
         hasAccessToken: !!session.access_token,
         accessTokenPreview: session.access_token ? session.access_token.substring(0, 30) + '...' : 'missing',
         jwtPayload: jwtPayload ? {

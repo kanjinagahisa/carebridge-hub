@@ -251,9 +251,9 @@ function ResetPasswordContent() {
       // パスワード更新成功
       // パスワード変更完了メールを送信（APIエンドポイントを呼び出し）
       try {
-        if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Sending password changed notification email request...', {
+        if (process.env.NODE_ENV !== "production") console.log('[ResetPassword] Sending password changed notification email request', {
           userId: user.id,
-          email: user.email,
+          hasUser: !!user,
         })
         
         const response = await fetch('/api/auth/password-changed-notify', {

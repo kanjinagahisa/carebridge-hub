@@ -18,8 +18,9 @@ export default async function ClientsPage() {
     const supabase = await createClient()
     if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Supabase client created')
 
+    return await perf('clients:total', async () => {
     let user: any = null
-    await perf('clients:getSession', async () => {
+    await perf('clients:auth', async () => {
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
@@ -50,7 +51,7 @@ export default async function ClientsPage() {
               if (setSessionError) {
                 console.error('[ClientsPage] Error setting session from cookie:', setSessionError.message)
               } else if (setSessionData?.user) {
-                if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session set from cookie successfully, user:', setSessionData.user.email)
+                if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Session set from cookie successfully', { hasUser: true })
                 // setSession()の結果から直接userを取得
                 user = setSessionData.user
               }
@@ -92,7 +93,7 @@ export default async function ClientsPage() {
       )
     }
 
-    if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] User authenticated', { hasUser: true })
 
     // Server ComponentではCookieの書き込みが制限されているため、
     // setSession()で設定したセッションがCookieに保存されず、
@@ -132,15 +133,7 @@ export default async function ClientsPage() {
     const latestFacilityId = userFacilities?.[0]?.facility_id
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[ClientsPage] Facility info:', {
-        latestFacilityId,
-        facilityName,
-        allFacilities: userFacilities?.map((uf) => ({
-          facility_id: uf.facility_id,
-          created_at: uf.created_at,
-          name: Array.isArray(uf.facilities) ? uf.facilities[0]?.name : (uf.facilities as { name?: string } | null | undefined)?.name
-        }))
-      })
+      console.log('[ClientsPage] Facility info', { latestFacilityId, facilitiesCount: userFacilities?.length ?? 0 })
     }
 
     // 利用者を取得（最新の施設の利用者のみ）
@@ -165,11 +158,7 @@ export default async function ClientsPage() {
       } else {
         clients = (data as Client[]) || []
         if (process.env.NODE_ENV !== 'production') {
-          console.log('[ClientsPage] Fetched clients:', {
-            count: clients.length,
-            facilityId: latestFacilityId,
-            facilityName,
-          })
+          console.log('[ClientsPage] Fetched clients', { count: clients.length, facilityId: latestFacilityId })
         }
       }
     } else {
@@ -231,9 +220,8 @@ export default async function ClientsPage() {
     }
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[ClientsPage] Rendering ClientsListClient with:', {
+      console.log('[ClientsPage] Rendering ClientsListClient', {
         clientsCount: clients.length,
-        facilityName,
         hasError: !!clientsError,
         postsMapSize: Object.keys(clientPostsMap).length,
         unreadCountsSize: Object.keys(unreadCountsMap).length,
@@ -250,6 +238,7 @@ export default async function ClientsPage() {
         currentUserId={user.id}
       />
     )
+  })
   } catch (error) {
     console.error('[ClientsPage] Unexpected error:', error)
     return (

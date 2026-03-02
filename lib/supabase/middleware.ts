@@ -107,7 +107,7 @@ export async function updateSession(request: NextRequest) {
                 console.error('[Middleware] Error setting session from cookie:', setSessionError.message)
                 // setSession()が失敗した場合、getUser()を試す
               } else if (setSessionData?.user) {
-                if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Session set from cookie successfully, user:', setSessionData.user.email)
+                if (process.env.NODE_ENV !== 'production') console.log('[Middleware] Session set from cookie successfully', { hasUser: true })
                 finalUser = setSessionData.user
               }
             } catch (setSessionErr: any) {
@@ -207,7 +207,7 @@ export async function updateSession(request: NextRequest) {
       console.error('[Middleware] Error details:', getUserError)
     }
   } else if (finalUser) {
-    if (process.env.NODE_ENV !== 'production') console.log('[Middleware] User authenticated:', finalUser.id, finalUser.email)
+    if (process.env.NODE_ENV !== 'production') console.log('[Middleware] User authenticated', { hasUser: true })
   } else {
     if (process.env.NODE_ENV !== 'production') console.log('[Middleware] No user found (not authenticated)')
   }

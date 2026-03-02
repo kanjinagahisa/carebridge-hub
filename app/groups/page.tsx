@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
+import { perf } from '@/lib/perf'
 import GroupList from '@/components/groups/GroupList'
 import type { Group } from '@/types/carebridge'
 import { ROLES } from '@/lib/constants'
@@ -18,14 +19,15 @@ export default async function GroupsPage() {
     const supabase = await createClient()
     if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Supabase client created')
 
+    return await perf('groups:total', async () => {
+    let user: any = null
+    await perf('groups:auth', async () => {
     // Cookieからセッションを明示的に設定を試みる（ミドルウェアと同じ処理）
     const { cookies } = await import('next/headers')
     const cookieStore = await cookies()
     const authCookies = cookieStore.getAll().filter((cookie) =>
       cookie.name.includes('sb-') || cookie.name.includes('auth-token')
     )
-
-    let user: any = null
 
     if (authCookies.length > 0) {
       const authTokenCookie = authCookies.find((c) => c.name.includes('auth-token'))
@@ -53,8 +55,8 @@ export default async function GroupsPage() {
                 )
               } else if (setSessionData?.user) {
                 if (process.env.NODE_ENV !== "production") console.log(
-                  '[GroupsPage] Session set from cookie successfully, user:',
-                  setSessionData.user.email
+                  '[GroupsPage] Session set from cookie successfully',
+                  { hasUser: true }
                 )
                 user = setSessionData.user
               }
@@ -83,6 +85,7 @@ export default async function GroupsPage() {
         user = getUserResult
       }
     }
+    })
 
     if (!user) {
       if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] No user found, returning login required message')
@@ -93,7 +96,7 @@ export default async function GroupsPage() {
       )
     }
 
-    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] User authenticated', { hasUser: true })
 
     // adminSupabaseクライアントを使用してRLSをバイパスし、確実に施設情報を取得
     const adminSupabase = createAdminClient()
@@ -129,9 +132,8 @@ export default async function GroupsPage() {
     const userRole = userFacilities?.[0]?.role
     const isAdmin = userRole === ROLES.ADMIN
 
-    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Facility info:', {
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Facility info', {
       facilityIdsCount: facilityIds.length,
-      facilityName,
       isAdmin,
     })
 
@@ -139,33 +141,33 @@ export default async function GroupsPage() {
     let groupsError: any = null
 
     if (facilityIds.length > 0) {
-      if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetching groups for facilities:', facilityIds)
+      if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetching groups for facilities', { facilityIdsCount: facilityIds.length })
       // adminSupabaseクライアントを使用してRLSをバイパスし、確実にグループを取得
-      const { data, error } = await adminSupabase
-        .from('groups')
-        .select('*')
-        .in('facility_id', facilityIds)
-        .eq('deleted', false)
-        .order('updated_at', { ascending: false })
+      const { data, error } = await perf('groups:queryList', async () => {
+        return adminSupabase
+          .from('groups')
+          .select('*')
+          .in('facility_id', facilityIds)
+          .eq('deleted', false)
+          .order('updated_at', { ascending: false })
+      }, { count: facilityIds.length })
 
       if (error) {
         console.error('[GroupsPage] Error fetching groups with admin client:', error)
         groupsError = error
       } else {
         groups = (data as Group[]) || []
-        if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetched groups:', {
+        if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetched groups', {
           count: groups.length,
-          facilityIds: facilityIds.length,
-          facilityName,
+          facilityIdsCount: facilityIds.length,
         })
       }
     } else {
       if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] No facility IDs found, skipping groups fetch')
     }
 
-    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Rendering GroupList with:', {
+    if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Rendering GroupList', {
       groupsCount: groups.length,
-      facilityName,
       isAdmin,
       hasError: !!groupsError,
     })
@@ -206,6 +208,7 @@ export default async function GroupsPage() {
         </div>
       </div>
     )
+  })
   } catch (error) {
     console.error('[GroupsPage] Unexpected error in Server Component:', error)
     return (

@@ -58,8 +58,8 @@ export default async function ClientTimelinePage({
                 )
               } else if (setSessionData?.user) {
                 console.log(
-                  '[ClientTimelinePage] Session set from cookie successfully, user:',
-                  setSessionData.user.email
+                  '[ClientTimelinePage] Session set from cookie successfully',
+                  { hasUser: true }
                 )
                 user = setSessionData.user
               }
@@ -85,7 +85,7 @@ export default async function ClientTimelinePage({
       user = getUserResult
     }
 
-    console.log('[ClientTimelinePage] User authenticated:', user.id, user.email)
+    console.log('[ClientTimelinePage] User authenticated', { hasUser: true })
 
     // Storageアクセスのためにセッションが正しく設定されているか確認
     const { data: { session: storageSession }, error: storageSessionError } = await supabase.auth.getSession()

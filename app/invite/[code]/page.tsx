@@ -282,10 +282,9 @@ export default function InviteAcceptPage() {
 
       // ユーザーが存在しない場合は作成する
       if (!existingUser) {
-        console.log('[InviteAcceptPage] User not found in public.users, creating...', {
+        console.log('[InviteAcceptPage] User not found in public.users, creating', {
           user_id: user.id,
-          email: user.email,
-          user_metadata: user.user_metadata,
+          hasUser: !!user,
         })
 
         // user_metadataから情報を取得、なければデフォルト値を使用

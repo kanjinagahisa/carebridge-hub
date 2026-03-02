@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
               if (setSessionError) {
                 console.error('[API] Error setting session from cookie:', setSessionError.message)
               } else if (setSessionData?.user) {
-                if (process.env.NODE_ENV !== "production") console.log('[API] Session set from cookie successfully, user:', setSessionData.user.email)
+                if (process.env.NODE_ENV !== "production") console.log('[API] Session set from cookie successfully', { hasUser: true })
                 userFromCookie = setSessionData.user
               }
             } else {

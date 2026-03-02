@@ -57,8 +57,8 @@ export default async function GroupTimelinePage({
                 )
               } else if (setSessionData?.user) {
                 console.log(
-                  '[GroupTimelinePage] Session set from cookie successfully, user:',
-                  setSessionData.user.email
+                  '[GroupTimelinePage] Session set from cookie successfully',
+                  { hasUser: true }
                 )
                 user = setSessionData.user
               }
@@ -92,7 +92,7 @@ export default async function GroupTimelinePage({
       redirect('/login')
     }
 
-    console.log('[GroupTimelinePage] User authenticated:', user.id, user.email)
+    console.log('[GroupTimelinePage] User authenticated', { hasUser: true })
 
     // ユーザーのロールを取得 (admin client を使用して RLS をバイパス)
     console.log('[GroupTimelinePage] Fetching user role with admin client...')

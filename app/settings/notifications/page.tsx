@@ -48,7 +48,7 @@ export default async function NotificationsSettingsPage() {
                 if (setSessionError) {
                   console.error('[NotificationsSettingsPage] Error setting session from cookie:', setSessionError.message)
                 } else if (setSessionData?.user) {
-                  if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] Session set from cookie successfully, user:', setSessionData.user.email)
+                  if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] Session set from cookie successfully', { hasUser: true })
                   user = setSessionData.user
                 }
               } catch (setSessionErr: any) {
@@ -85,7 +85,7 @@ export default async function NotificationsSettingsPage() {
       redirect('/login')
     }
 
-    if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[NotificationsSettingsPage] User authenticated', { hasUser: true })
 
     return (
       <div className="min-h-screen bg-gray-100 pb-20">

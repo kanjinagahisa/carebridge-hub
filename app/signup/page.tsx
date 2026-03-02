@@ -81,9 +81,9 @@ export default function SignupPage() {
       },
     })
 
-    console.log('[Signup] Signup response:', {
-      user: authData?.user ? { id: authData.user.id, email: authData.user.email, confirmed: authData.user.email_confirmed_at } : null,
-      session: authData?.session ? 'exists' : 'null',
+    console.log('[Signup] Signup response', {
+      hasUser: !!authData?.user,
+      hasSession: !!authData?.session,
       error: authError,
     })
 
@@ -137,7 +137,7 @@ export default function SignupPage() {
       // メール確認が必要な場合（新規ユーザー）
       // Database Triggerによりusersテーブルには既にレコードが作成されています
       console.log('[Signup] No session - email confirmation required')
-      console.log('[Signup] User email confirmation status:', authData.user.email_confirmed_at)
+      console.log('[Signup] User email confirmation status', { hasConfirmedAt: !!authData.user.email_confirmed_at })
       console.log('[Signup] Check Supabase Dashboard -> Authentication -> Users for email confirmation status')
       setError('success')
       setLoading(false)

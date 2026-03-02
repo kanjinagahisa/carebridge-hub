@@ -50,7 +50,7 @@ export default async function MenuPage() {
               if (setSessionError) {
                 console.error('[MenuPage] Error setting session from cookie:', setSessionError.message)
               } else if (setSessionData?.user) {
-                console.log('[MenuPage] Session set from cookie successfully, user:', setSessionData.user.email)
+                console.log('[MenuPage] Session set from cookie successfully', { hasUser: true })
                 user = setSessionData.user
               }
             }
@@ -84,7 +84,7 @@ export default async function MenuPage() {
       redirect('/login')
     }
 
-    console.log('[MenuPage] User authenticated:', user.id, user.email)
+    console.log('[MenuPage] User authenticated', { hasUser: true })
 
     // プロフィール取得と管理者判定のため、adminSupabaseを使用してRLSをバイパス
     console.log('[MenuPage] Fetching profile and user role with admin client...')

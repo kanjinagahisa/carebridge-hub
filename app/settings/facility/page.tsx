@@ -52,7 +52,7 @@ export default async function FacilitySettingsPage({ searchParams }: { searchPar
                 if (setSessionError) {
                   console.error('[FacilitySettingsPage] Error setting session from cookie:', setSessionError.message)
                 } else if (setSessionData?.user) {
-                  if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Session set from cookie successfully, user:', setSessionData.user.email)
+                  if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] Session set from cookie successfully', { hasUser: true })
                   user = setSessionData.user
                 }
               } catch (setSessionErr: any) {
@@ -90,7 +90,7 @@ export default async function FacilitySettingsPage({ searchParams }: { searchPar
       redirect('/login')
     }
 
-    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] User authenticated:', user.id, user.email)
+    if (process.env.NODE_ENV !== "production") console.log('[FacilitySettingsPage] User authenticated', { hasUser: true })
 
     // adminSupabaseクライアントを使用してRLSをバイパスし、確実に施設情報を取得
     const adminSupabase = createAdminClient()
