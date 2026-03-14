@@ -194,14 +194,13 @@ export default async function GroupTimelinePage({
               <h1 className="text-lg font-semibold text-gray-900 flex-1 text-center -ml-8">
                 {group.name}
               </h1>
-              {/* 右（adminのみ）：グループ編集・メンバー管理（将来用、v1では未実装） */}
-              {isAdmin ? (
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                  <MoreVertical size={20} className="text-gray-600" />
-                </button>
-              ) : (
-                <div className="w-10" />
-              )}
+              {/* 右：グループメニューへ（所属者全員に表示） */}
+              <Link
+                href={`/groups/${params.id}/menu`}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <MoreVertical size={20} className="text-gray-600" />
+              </Link>
             </div>
           </div>
         </div>
