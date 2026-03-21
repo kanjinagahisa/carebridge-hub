@@ -1,19 +1,81 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { ChevronLeft, Bell, Users, UserPlus, LogOut } from 'lucide-react'
+import { useParams, useRouter } from 'next/navigation'
+import { ChevronLeft, Bell, BellOff, Users, UserPlus, LogOut } from 'lucide-react'
 
 /**
  * グループメニュー画面（/groups/[id]/menu）
- * フェーズA: 見た目・遷移・退会確認モーダルのみ。実データ変更なし。
+ * Phase B: 通知ミュートトグル・退会を本実装
  */
 export default function GroupMenuPage() {
   const params = useParams()
+  const router = useRouter()
   const id = params.id as string
 
+  const [muted, setMuted] = useState(false)
+  const [muteLoading, setMuteLoading] = useState(true)
+  const [muteError, setMuteError] = useState<string | null>(null)
+
   const [showLeaveModal, setShowLeaveModal] = useState(false)
+  const [leaveLoading, setLeaveLoading] = useState(false)
+  const [leaveError, setLeaveError] = useState<string | null>(null)
+
+  // 初期表示時にミュート状態を取得
+  useEffect(() => {
+    fetch(`/api/groups/notification-mute?groupId=${id}`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (typeof d.muted === 'boolean') setMuted(d.muted)
+      })
+      .catch(() => {/* ネットワークエラー時は初期値のまま */})
+      .finally(() => setMuteLoading(false))
+  }, [id])
+
+  // 通知ミュートトグル
+  const toggleMute = async () => {
+    const next = !muted
+    setMuted(next) // 楽観的更新
+    setMuteError(null)
+    try {
+      const res = await fetch('/api/groups/notification-mute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: id, mute: next }),
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        setMuted(!next) // ロールバック
+        setMuteError('通知設定の変更に失敗しました')
+      }
+    } catch {
+      setMuted(!next) // ロールバック
+      setMuteError('通知設定の変更に失敗しました')
+    }
+  }
+
+  // 退会実行
+  const handleLeave = async () => {
+    setLeaveLoading(true)
+    setLeaveError(null)
+    try {
+      const res = await fetch('/api/groups/leave', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ groupId: id }),
+        credentials: 'include',
+      })
+      if (!res.ok) {
+        const j = await res.json()
+        setLeaveError(j.error ?? '退会に失敗しました')
+        return
+      }
+      router.push('/groups')
+    } finally {
+      setLeaveLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -32,11 +94,27 @@ export default function GroupMenuPage() {
       </div>
 
       <div className="p-4 space-y-2">
-        {/* 通知オフ（フェーズAは見た目のみ） */}
+        {muteError && (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600">
+            {muteError}
+          </div>
+        )}
+
+        {/* 通知オフ / 通知オン */}
         <div className="bg-white rounded-xl shadow-sm">
-          <button className="w-full flex items-center gap-3 px-4 py-4 text-left">
-            <Bell size={20} className="text-gray-500" />
-            <span className="text-sm text-gray-900">通知オフ</span>
+          <button
+            className="w-full flex items-center gap-3 px-4 py-4 text-left disabled:opacity-50"
+            onClick={toggleMute}
+            disabled={muteLoading}
+          >
+            {muted ? (
+              <BellOff size={20} className="text-gray-400" />
+            ) : (
+              <Bell size={20} className="text-gray-500" />
+            )}
+            <span className={`text-sm ${muted ? 'text-gray-400' : 'text-gray-900'}`}>
+              {muted ? '通知オン' : '通知オフ'}
+            </span>
           </button>
         </div>
 
@@ -78,18 +156,26 @@ export default function GroupMenuPage() {
             <p className="text-sm text-gray-600">
               退会すると、このグループの投稿やメンバー一覧にアクセスできなくなります。
             </p>
+            {leaveError && (
+              <p className="text-sm text-red-600">{leaveError}</p>
+            )}
             <div className="flex gap-3">
               <button
-                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700"
-                onClick={() => setShowLeaveModal(false)}
+                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 disabled:opacity-50"
+                onClick={() => {
+                  setShowLeaveModal(false)
+                  setLeaveError(null)
+                }}
+                disabled={leaveLoading}
               >
                 キャンセル
               </button>
               <button
-                className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium"
-                onClick={() => setShowLeaveModal(false)}
+                className="flex-1 px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium disabled:opacity-50"
+                onClick={handleLeave}
+                disabled={leaveLoading}
               >
-                退会
+                {leaveLoading ? '処理中...' : '退会'}
               </button>
             </div>
           </div>
