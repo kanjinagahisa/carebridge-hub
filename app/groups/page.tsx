@@ -138,23 +138,37 @@ export default async function GroupsPage() {
 
     if (facilityIds.length > 0) {
       if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetching groups for facilities', { facilityIdsCount: facilityIds.length })
-      // adminSupabaseクライアントを使用してRLSをバイパスし、確実にグループを取得
-      const { data, error } = await adminSupabase
-        .from('groups')
-        .select('*')
-        .in('facility_id', facilityIds)
+      // アクティブメンバーシップ経由でグループを取得（退会済みグループを除外）
+      const { data: memberRows, error: memberRowsError } = await adminSupabase
+        .from('group_members')
+        .select('group_id')
+        .eq('user_id', user.id)
         .eq('deleted', false)
-        .order('updated_at', { ascending: false })
 
-      if (error) {
-        console.error('[GroupsPage] Error fetching groups with admin client:', error)
-        groupsError = error
+      if (memberRowsError) {
+        console.error('[GroupsPage] Error fetching group memberships:', memberRowsError)
+        groupsError = memberRowsError
       } else {
-        groups = (data as Group[]) || []
-        if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetched groups', {
-          count: groups.length,
-          facilityIdsCount: facilityIds.length,
-        })
+        const myGroupIds = (memberRows ?? []).map((m: any) => m.group_id as string).filter(Boolean)
+        if (myGroupIds.length > 0) {
+          const { data, error } = await adminSupabase
+            .from('groups')
+            .select('*')
+            .in('id', myGroupIds)
+            .eq('deleted', false)
+            .order('updated_at', { ascending: false })
+
+          if (error) {
+            console.error('[GroupsPage] Error fetching groups with admin client:', error)
+            groupsError = error
+          } else {
+            groups = (data as Group[]) || []
+            if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Fetched groups', {
+              count: groups.length,
+              facilityIdsCount: facilityIds.length,
+            })
+          }
+        }
       }
     } else {
       if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] No facility IDs found, skipping groups fetch')

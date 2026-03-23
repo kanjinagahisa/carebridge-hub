@@ -41,18 +41,24 @@ export async function GET(request: NextRequest) {
       .maybeSingle()
 
     if (memberErr) {
+      console.error('[notification-mute GET] memberErr', { groupId, userId: user.id, message: memberErr.message, code: memberErr.code, details: memberErr.details, hint: memberErr.hint })
       return NextResponse.json({ error: 'Failed to verify membership' }, { status: 500 })
     }
     if (!membership) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    const { data: mute } = await admin
+    const { data: mute, error: muteErr } = await admin
       .from('group_notification_mutes')
       .select('id')
       .eq('group_id', groupId)
       .eq('user_id', user.id)
       .maybeSingle()
+
+    if (muteErr) {
+      console.error('[notification-mute GET] muteErr', { groupId, userId: user.id, message: muteErr.message, code: muteErr.code, details: muteErr.details, hint: muteErr.hint })
+      return NextResponse.json({ error: muteErr.message }, { status: 500 })
+    }
 
     return NextResponse.json({ muted: !!mute })
   } catch (e: any) {
@@ -94,6 +100,7 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (memberErr) {
+      console.error('[notification-mute POST] memberErr', { groupId, userId: user.id, message: memberErr.message, code: memberErr.code, details: memberErr.details, hint: memberErr.hint })
       return NextResponse.json({ error: 'Failed to verify membership' }, { status: 500 })
     }
     if (!membership) {
@@ -105,6 +112,7 @@ export async function POST(request: NextRequest) {
         .from('group_notification_mutes')
         .upsert({ group_id: groupId, user_id: user.id }, { onConflict: 'group_id,user_id' })
       if (error) {
+        console.error('[notification-mute POST] upsertErr', { operation: 'upsert', groupId, userId: user.id, mute, message: error.message, code: error.code, details: error.details, hint: error.hint })
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
     } else {
@@ -114,6 +122,7 @@ export async function POST(request: NextRequest) {
         .eq('group_id', groupId)
         .eq('user_id', user.id)
       if (error) {
+        console.error('[notification-mute POST] deleteErr', { operation: 'delete', groupId, userId: user.id, mute, message: error.message, code: error.code, details: error.details, hint: error.hint })
         return NextResponse.json({ error: error.message }, { status: 500 })
       }
     }

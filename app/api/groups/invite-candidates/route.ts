@@ -17,7 +17,7 @@ const supabaseAdmin = createClient(
  * 🔐 認証は「Cookieのセッション」から user を取るのが本線です。
  * あなたのプロジェクトで既に「サーバーで user を取る helper」があるなら、それに置き換えてOK。
  *
- * ここでは “簡易” として:
+ * ここでは "簡易" として:
  * - Authorization: Bearer <access_token> があればそれを使う
  * - なければ 401
  *
@@ -110,47 +110,41 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2) facility_id を確定（users.current_facility_id を本線）
-    const { data: me, error: meErr } = await supabaseAdmin
-      .from("users")
-      .select("id, current_facility_id, deleted")
-      .eq("id", userId)
+    // 2) groupId を確定
+    const { searchParams } = new URL(req.url)
+    const groupId = searchParams.get("groupId")
+    if (!groupId) {
+      return NextResponse.json({ error: "groupId is required" }, { status: 400 });
+    }
+
+    // 3) 呼び出し元がそのグループの active member であることを確認
+    const { data: membership, error: memberErr } = await supabaseAdmin
+      .from("group_members")
+      .select("id")
+      .eq("group_id", groupId)
+      .eq("user_id", userId)
+      .eq("deleted", false)
       .maybeSingle();
-
-    if (meErr) {
-      return NextResponse.json({ error: meErr.message }, { status: 500 });
+    if (memberErr) {
+      return NextResponse.json({ error: "Failed to verify membership" }, { status: 500 });
     }
-    if (!me || me.deleted) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
-    }
-
-    let facilityId: string | null = me.current_facility_id ?? null;
-
-    // 3) current_facility_id が空なら user_facility_roles から拾う（保険）
-    if (!facilityId) {
-      const { data: ufr, error: ufrErr } = await supabaseAdmin
-        .from("user_facility_roles")
-        .select("facility_id")
-        .eq("user_id", userId)
-        .eq("deleted", false)
-        .order("created_at", { ascending: false })
-        .limit(1);
-
-      if (ufrErr) {
-        return NextResponse.json({ error: ufrErr.message }, { status: 500 });
-      }
-      facilityId = ufr?.[0]?.facility_id ?? null;
+    if (!membership) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    if (!facilityId) {
-      // ここは「施設未選択」状態。UI側で“施設を選んでください”に誘導できる
-      return NextResponse.json(
-        { error: "No facility selected for this user" },
-        { status: 400 }
-      );
+    // 4) グループの施設IDを取得
+    const { data: group, error: groupErr } = await supabaseAdmin
+      .from("groups")
+      .select("facility_id")
+      .eq("id", groupId)
+      .eq("deleted", false)
+      .maybeSingle();
+    if (groupErr || !group) {
+      return NextResponse.json({ error: "Group not found" }, { status: 404 });
     }
+    const facilityId = group.facility_id
 
-    // 4) 招待候補（施設スタッフ一覧）を返す
+    // 5) 招待候補（施設スタッフ一覧）を返す
     //    - deleted は除外
     //    - 自分は候補から除外（好みで外さないならこの行を消す）
     const { data: rows, error: listErr } = await supabaseAdmin
@@ -158,6 +152,7 @@ export async function GET(req: Request) {
       .select(
         `
         role,
+        user_id,
         user:users (
           id,
           display_name,
@@ -178,7 +173,7 @@ export async function GET(req: Request) {
     const candidates =
       rows
         ?.map((r: any) => ({
-          id: r.user?.id as string,
+          id: r.user_id as string,
           display_name: r.user?.display_name as string | null,
           email: r.user?.email as string | null,
           profession: r.user?.profession as string | null,
@@ -192,9 +187,10 @@ export async function GET(req: Request) {
           (a.display_name ?? "").localeCompare(b.display_name ?? "")
         ) ?? [];
 
+    const result = candidates.map(({ deleted, ...rest }) => rest)
     return NextResponse.json({
       facility_id: facilityId,
-      candidates: candidates.map(({ deleted, ...rest }) => rest),
+      candidates: result,
     });
   } catch (e: any) {
     return NextResponse.json(

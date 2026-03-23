@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
-import { PROFESSION_LABELS } from '@/lib/constants'
+import MembersSearch from './MembersSearch'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,33 +64,7 @@ export default async function GroupMembersPage({
         </div>
       </div>
 
-      <div className="p-4 space-y-2">
-        {(members ?? []).length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm px-4 py-8 text-center">
-            <p className="text-sm text-gray-500">メンバーがいません。</p>
-          </div>
-        ) : (
-          (members ?? []).map((m: any) => {
-            const profLabel =
-              PROFESSION_LABELS[m.user?.profession ?? ''] ||
-              m.user?.profession ||
-              ''
-            return (
-              <div
-                key={m.user?.id}
-                className="bg-white rounded-xl shadow-sm px-4 py-3"
-              >
-                <p className="text-sm font-medium text-gray-900">
-                  {m.user?.display_name || '名前なし'}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  {[profLabel, m.role].filter(Boolean).join(' · ')}
-                </p>
-              </div>
-            )
-          })
-        )}
-      </div>
+      <MembersSearch members={(members ?? []) as any} />
     </div>
   )
 }

@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
 
     const { data: members, error } = await admin
       .from('group_members')
-      .select('role, user:users(id, display_name, profession)')
+      .select('role, user_id, user:users(id, display_name, profession)')
       .eq('group_id', groupId)
       .eq('deleted', false)
 
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     }
 
     const result = (members ?? []).map((m: any) => ({
-      id: m.user?.id as string,
+      id: m.user_id as string,
       display_name: m.user?.display_name as string | null,
       profession: m.user?.profession as string | null,
       role: m.role as string | null,

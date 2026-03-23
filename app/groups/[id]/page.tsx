@@ -97,6 +97,19 @@ export default async function GroupTimelinePage({
     // ユーザーのロールを取得 (admin client を使用して RLS をバイパス)
     console.log('[GroupTimelinePage] Fetching user role with admin client...')
     const adminSupabase = createAdminClient()
+
+    // 退会済みユーザーのアクセスをブロック
+    const { data: membership } = await adminSupabase
+      .from('group_members')
+      .select('id')
+      .eq('group_id', params.id)
+      .eq('user_id', user.id)
+      .eq('deleted', false)
+      .maybeSingle()
+    if (!membership) {
+      notFound()
+    }
+
     const { data: userFacilities, error: facilitiesError } = await adminSupabase
       .from('user_facility_roles')
       .select('role, facility_id, facilities(name)')

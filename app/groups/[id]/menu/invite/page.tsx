@@ -23,6 +23,7 @@ export default function GroupInvitePage() {
 
   const [candidates, setCandidates] = useState<Candidate[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -34,7 +35,7 @@ export default function GroupInvitePage() {
       try {
         // 施設の全メンバー と 現グループのメンバーを並行取得し、未所属候補を絞り込む
         const [facRes, memberRes] = await Promise.all([
-          fetch('/api/groups/invite-candidates', { credentials: 'include' }),
+          fetch(`/api/groups/invite-candidates?groupId=${id}`, { credentials: 'include' }),
           fetch(`/api/groups/members?groupId=${id}`, { credentials: 'include' }),
         ])
         if (!facRes.ok || !memberRes.ok) {
@@ -139,6 +140,18 @@ export default function GroupInvitePage() {
           </div>
         )}
 
+        {!loading && !loadError && (
+          <div className="bg-white rounded-xl shadow-sm px-3 py-2">
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="名前で検索"
+              className="w-full bg-gray-100 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none"
+            />
+          </div>
+        )}
+
         {loading ? (
           <div className="bg-white rounded-xl shadow-sm px-4 py-8 text-center">
             <p className="text-sm text-gray-500">読み込み中...</p>
@@ -147,8 +160,12 @@ export default function GroupInvitePage() {
           <div className="bg-white rounded-xl shadow-sm px-4 py-8 text-center">
             <p className="text-sm text-gray-500">招待できるメンバーがいません。</p>
           </div>
+        ) : candidates.filter((c) => (c.display_name ?? '').includes(query.trim())).length === 0 ? (
+          <div className="bg-white rounded-xl shadow-sm px-4 py-8 text-center">
+            <p className="text-sm text-gray-500">該当するメンバーがいません。</p>
+          </div>
         ) : (
-          candidates.map((c) => (
+          candidates.filter((c) => (c.display_name ?? '').includes(query.trim())).map((c) => (
             <div
               key={c.id}
               className="bg-white rounded-xl shadow-sm px-4 py-3 flex items-center justify-between cursor-pointer active:bg-gray-50"
