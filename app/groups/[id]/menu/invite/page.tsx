@@ -33,25 +33,14 @@ export default function GroupInvitePage() {
   useEffect(() => {
     async function load() {
       try {
-        // 施設の全メンバー と 現グループのメンバーを並行取得し、未所属候補を絞り込む
-        const [facRes, memberRes] = await Promise.all([
-          fetch(`/api/groups/invite-candidates?groupId=${id}`, { credentials: 'include' }),
-          fetch(`/api/groups/members?groupId=${id}`, { credentials: 'include' }),
-        ])
-        if (!facRes.ok || !memberRes.ok) {
+        // 招待候補は invite-candidates API に一本化（active member 除外は API 側で処理）
+        const res = await fetch(`/api/groups/invite-candidates?groupId=${id}`, { credentials: 'include' })
+        if (!res.ok) {
           setLoadError('メンバー情報の取得に失敗しました')
           return
         }
-        const facData = await facRes.json()
-        const memberData = await memberRes.json()
-
-        const memberIds = new Set<string>(
-          (memberData.members ?? []).map((m: any) => m.id as string)
-        )
-        const filtered = (facData.candidates ?? []).filter(
-          (c: any) => !memberIds.has(c.id)
-        ) as Candidate[]
-        setCandidates(filtered)
+        const data = await res.json()
+        setCandidates((data.candidates ?? []) as Candidate[])
       } catch (e) {
         console.error('[GroupInvitePage] load error', e)
         setLoadError('メンバー情報の取得に失敗しました')

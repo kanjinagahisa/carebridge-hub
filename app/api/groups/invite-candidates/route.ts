@@ -144,9 +144,22 @@ export async function GET(req: Request) {
     }
     const facilityId = group.facility_id
 
-    // 5) 招待候補（施設スタッフ一覧）を返す
-    //    - deleted は除外
-    //    - 自分は候補から除外（好みで外さないならこの行を消す）
+    // 5) グループの active member user_id 一覧を取得（招待候補から除外するため）
+    const { data: activeMembers, error: activeMembersErr } = await supabaseAdmin
+      .from("group_members")
+      .select("user_id")
+      .eq("group_id", groupId)
+      .eq("deleted", false);
+    if (activeMembersErr) {
+      return NextResponse.json({ error: "Failed to fetch active members" }, { status: 500 });
+    }
+    const activeMemberIds = new Set<string>(
+      (activeMembers ?? []).map((m: any) => m.user_id as string)
+    )
+
+    // 6) 招待候補（施設スタッフ一覧）を返す
+    //    - users.deleted = true は除外
+    //    - active member（deleted=false）は除外、deleted=true の過去 membership は除外しない
     const { data: rows, error: listErr } = await supabaseAdmin
       .from("user_facility_roles")
       .select(
@@ -182,7 +195,7 @@ export async function GET(req: Request) {
           deleted: !!r.user?.deleted,
         }))
         .filter((u) => !u.deleted)
-        .filter((u) => u.id !== userId) // 自分除外
+        .filter((u) => !activeMemberIds.has(u.id)) // active member 除外（自分含む）
         .sort((a, b) =>
           (a.display_name ?? "").localeCompare(b.display_name ?? "")
         ) ?? [];

@@ -42,14 +42,17 @@ export async function createApiClient(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      getAll() {
-        return request.cookies.getAll()
+      // @supabase/ssr v0.1.0 は get/set/remove インターフェースのみ使用する（getAll/setAll 未対応）
+      get(name: string) {
+        return request.cookies.get(name)?.value
       },
-      setAll(cookiesToSet: { name: string; value: string; options?: any }[]) {
-        // API RouteではCookieを設定できないため、何もしない
-        // 必要に応じて、レスポンスヘッダーにCookieを設定する
+      set(_name: string, _value: string, _options?: any) {
+        // API Route ではレスポンスオブジェクトなしで Cookie を設定できないため noop
       },
-    } as any,
+      remove(_name: string, _options?: any) {
+        // noop
+      },
+    },
     global: { headers: access_token ? { Authorization: `Bearer ${access_token}` } : {} },
   })
 
