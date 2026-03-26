@@ -201,12 +201,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 通知を送信
+    // 通知を送信（グループ投稿の場合は groupId を渡してメンバー絞り込み・mute除外を有効化）
     console.log('[push/notify][POST] Sending notifications to facility:', facilityId)
     const result = await sendPushNotificationsToFacility(
       facilityId,
       authorId,
-      payload
+      payload,
+      groupId
     )
 
     console.log('[push/notify][POST] Notification send result:', result)

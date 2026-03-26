@@ -66,12 +66,14 @@ interface SendPushResult {
  * @param facilityId - 施設ID
  * @param authorId - 投稿者ID（本人は除外）
  * @param payload - 通知ペイロード
+ * @param groupId - グループID（指定時はそのグループのactiveメンバーのみに絞り、muteユーザーを除外する）
  * @returns 送信結果
  */
 export async function sendPushNotificationsToFacility(
   facilityId: string,
   authorId: string,
-  payload: PushNotificationPayload
+  payload: PushNotificationPayload,
+  groupId?: string
 ): Promise<SendPushResult> {
   const result: SendPushResult = {
     success: 0,
@@ -103,13 +105,54 @@ export async function sendPushNotificationsToFacility(
   const adminSupabase = createAdminClient()
 
   try {
-    // 同じfacilityの購読者を取得（投稿者本人は除外、deleted=falseのみ）
-    const { data: subscriptions, error: fetchError } = await adminSupabase
+    // groupId が指定された場合: グループの active メンバー取得 + mute 除外
+    let targetUserIds: Set<string> | null = null
+    if (groupId) {
+      const { data: members, error: membersError } = await adminSupabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId)
+        .eq('deleted', false)
+
+      if (membersError) {
+        console.error('[push] Failed to fetch group members:', membersError)
+        return result
+      }
+
+      const { data: mutes, error: mutesError } = await adminSupabase
+        .from('group_notification_mutes')
+        .select('user_id')
+        .eq('group_id', groupId)
+
+      if (mutesError) {
+        console.error('[push] Failed to fetch group notification mutes:', mutesError)
+        return result
+      }
+
+      const mutedUserIds = new Set((mutes ?? []).map((m) => m.user_id as string))
+      targetUserIds = new Set(
+        (members ?? [])
+          .map((m) => m.user_id as string)
+          .filter((uid) => !mutedUserIds.has(uid))
+      )
+
+      if (targetUserIds.size === 0) {
+        console.log('[push] No target users after member+mute filter:', { groupId })
+        return result
+      }
+    }
+
+    // push_subscriptions の取得（投稿者本人は除外、deleted=falseのみ）
+    const baseQuery = adminSupabase
       .from('push_subscriptions')
       .select('id, user_id, endpoint, p256dh, auth, deleted')
       .eq('facility_id', facilityId)
       .eq('deleted', false)
       .neq('user_id', authorId)
+
+    const { data: subscriptions, error: fetchError } = targetUserIds !== null
+      ? await baseQuery.in('user_id', [...targetUserIds])
+      : await baseQuery
 
     if (fetchError) {
       console.error('[push] Failed to fetch subscriptions:', fetchError)
