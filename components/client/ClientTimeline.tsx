@@ -1,15 +1,18 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import type { Post } from '@/types/carebridge'
 import PostCard from '@/components/groups/PostCard'
 import ClientPostComposer from './ClientPostComposer'
 
+const PAGE_SIZE = 20
+
 interface ClientTimelineProps {
   clientId: string
   currentUserId: string
   initialPosts?: Post[]
+  facilityId: string
 }
 
 /**
@@ -20,10 +23,17 @@ export default function ClientTimeline({
   clientId,
   currentUserId,
   initialPosts = [],
+  facilityId,
 }: ClientTimelineProps) {
   const [posts, setPosts] = useState<Post[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isGeneratingUrls, setIsGeneratingUrls] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [isLoadingMore, setIsLoadingMore] = useState(false)
+  const [oldestCreatedAt, setOldestCreatedAt] = useState<string | null>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const isLoadingMoreRef = useRef(false)
+  const loadMoreRef = useRef<() => Promise<void>>(async () => {})
 
   // 既読をマークする関数
   const markPostsAsRead = async (postList: Post[]) => {
@@ -84,9 +94,13 @@ export default function ClientTimeline({
     }
   }
 
-  // 投稿一覧を取得
+  // 投稿一覧を取得（初回 / リセット）
   const loadPosts = async (): Promise<void> => {
     setIsLoading(true)
+    setHasMore(false)
+    setOldestCreatedAt(null)
+    setIsLoadingMore(false)
+    isLoadingMoreRef.current = false
     try {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -102,7 +116,7 @@ export default function ClientTimeline({
         .eq('client_id', clientId)
         .eq('deleted', false)
         .order('created_at', { ascending: false })
-        .limit(50)
+        .limit(PAGE_SIZE)
 
       if (error) {
         console.error('Failed to load posts:', error)
@@ -141,17 +155,22 @@ export default function ClientTimeline({
           }
         }
       }
-      
+
       // 添付ファイルの署名付きURLを生成（generateSignedUrls関数を使用）
       let postsWithSignedUrls = loadedPosts
       if (loadedPosts.length > 0) {
         postsWithSignedUrls = await generateSignedUrls(loadedPosts)
       }
-      
+
       // データが取得できた場合のみ投稿を更新
       // 空の配列が返された場合（RLSポリシーの問題の可能性）は既存の投稿を維持
       if (postsWithSignedUrls.length > 0) {
         setPosts(postsWithSignedUrls)
+        // カーソル更新
+        if (postsWithSignedUrls.length === PAGE_SIZE) {
+          setHasMore(true)
+          setOldestCreatedAt(postsWithSignedUrls[postsWithSignedUrls.length - 1].created_at ?? null)
+        }
         // 既読をマーク（タイムライン表示時に read を登録）
         await markPostsAsRead(postsWithSignedUrls)
       } else if (data === null || data === undefined) {
@@ -173,6 +192,83 @@ export default function ClientTimeline({
       // エラーが発生した場合でも既存の投稿を維持する
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  // 追加読み込み（カーソルページング）
+  const loadMorePosts = async (): Promise<void> => {
+    if (!hasMore || isLoadingMore || !oldestCreatedAt) return
+    if (isLoadingMoreRef.current) return
+    isLoadingMoreRef.current = true
+    setIsLoadingMore(true)
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('posts')
+        .select(
+          `
+          *,
+          reactions:post_reactions(*),
+          reads:post_reads(user_id),
+          attachments(*)
+        `
+        )
+        .eq('client_id', clientId)
+        .eq('deleted', false)
+        .lt('created_at', oldestCreatedAt)
+        .order('created_at', { ascending: false })
+        .limit(PAGE_SIZE)
+
+      if (error) {
+        console.error('[ClientTimeline] Failed to load more posts:', error)
+        return
+      }
+
+      let newPosts = (data as Post[]) || []
+
+      if (newPosts.length > 0) {
+        const authorIds = [...new Set(newPosts.map((p: any) => p.author_id).filter(Boolean))]
+        if (authorIds.length > 0) {
+          const { data: authors, error: authorsError } = await supabase
+            .from('users')
+            .select('id, display_name, profession')
+            .in('id', authorIds)
+            .eq('deleted', false)
+          if (!authorsError && authors) {
+            const authorsMap = new Map(authors.map((a: any) => [a.id, a]))
+            newPosts = newPosts.map((post: any) => ({
+              ...post,
+              author: authorsMap.get(post.author_id) || null,
+            }))
+          }
+        }
+      }
+
+      const newPostsWithUrls = newPosts.length > 0 ? await generateSignedUrls(newPosts) : newPosts
+
+      // 重複除去してappend
+      setPosts((prev) => {
+        const existingIds = new Set(prev.map((p) => p.id))
+        const deduplicated = newPostsWithUrls.filter((p) => !existingIds.has(p.id))
+        return [...prev, ...deduplicated]
+      })
+
+      // カーソル更新
+      if (newPostsWithUrls.length === PAGE_SIZE) {
+        setHasMore(true)
+        setOldestCreatedAt(newPostsWithUrls[newPostsWithUrls.length - 1].created_at ?? null)
+      } else {
+        setHasMore(false)
+      }
+
+      if (newPostsWithUrls.length > 0) {
+        await markPostsAsRead(newPostsWithUrls)
+      }
+    } catch (error) {
+      console.error('[ClientTimeline] Failed to load more posts:', error)
+    } finally {
+      setIsLoadingMore(false)
+      isLoadingMoreRef.current = false
     }
   }
 
@@ -330,6 +426,10 @@ export default function ClientTimeline({
   // 初期読み込みと既読処理
   useEffect(() => {
     const initializePosts = async () => {
+      setHasMore(false)
+      setOldestCreatedAt(null)
+      setIsLoadingMore(false)
+      isLoadingMoreRef.current = false
       setIsLoading(true)
       try {
         if (initialPosts.length === 0) {
@@ -339,6 +439,11 @@ export default function ClientTimeline({
           if (process.env.NODE_ENV !== "production") console.log('[ClientTimeline] Generating signed URLs for initial posts:', initialPosts.length)
           const postsWithSignedUrls = await generateSignedUrls(initialPosts)
           setPosts(postsWithSignedUrls)
+          // カーソル更新
+          if (postsWithSignedUrls.length === PAGE_SIZE) {
+            setHasMore(true)
+            setOldestCreatedAt(postsWithSignedUrls[postsWithSignedUrls.length - 1].created_at ?? null)
+          }
           // 初期表示時にも既読処理を実行
           await markPostsAsRead(postsWithSignedUrls)
         }
@@ -351,6 +456,32 @@ export default function ClientTimeline({
     initializePosts()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clientId])
+
+  // loadMoreRef を常に最新の loadMorePosts に同期
+  useEffect(() => {
+    loadMoreRef.current = loadMorePosts
+  })
+
+  // IntersectionObserver で sentinel を監視
+  useEffect(() => {
+    const sentinel = sentinelRef.current
+    if (!sentinel || !hasMore || isLoadingMore || !oldestCreatedAt) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) return
+        if (isLoadingMoreRef.current) return
+        if (!hasMore || !oldestCreatedAt) return
+        void loadMoreRef.current()
+      },
+      { rootMargin: '200px' }
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasMore, isLoadingMore, oldestCreatedAt])
 
   // 投稿作成後のコールバック
   const handlePostCreated = () => {
@@ -385,11 +516,12 @@ export default function ClientTimeline({
       <ClientPostComposer
         clientId={clientId}
         currentUserId={currentUserId}
+        facilityId={facilityId}
         onPostCreated={handlePostCreated}
       />
 
       {/* 投稿一覧 */}
-      {isLoading || isGeneratingUrls ? (
+      {(isLoading || isGeneratingUrls) && posts.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm p-6 text-center">
           <p className="text-gray-600">
             {isGeneratingUrls ? '添付ファイルを読み込み中...' : '読み込み中...'}
@@ -404,19 +536,23 @@ export default function ClientTimeline({
               currentUserId={currentUserId}
               onReactionChange={handleReactionChange}
             />
-            ))}
+          ))}
+          {/* 追加読み込みトリガー */}
+          <div ref={sentinelRef} />
+          {isLoadingMore && (
+            <div className="bg-white rounded-xl shadow-sm p-4 text-center">
+              <p className="text-gray-500 text-sm">読み込み中...</p>
+            </div>
+          )}
         </div>
-      ) : (
+      ) : !isLoading ? (
         <div className="bg-white rounded-xl shadow-sm p-6 text-center space-y-3">
           <p className="text-gray-600">まだこの利用者には投稿がありません。</p>
           <p className="text-sm text-gray-500">
             今日の様子や連絡事項を、ここから共有できます。
           </p>
         </div>
-      )}
+      ) : null}
     </div>
   )
 }
-
-
-

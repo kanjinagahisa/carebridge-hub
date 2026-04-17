@@ -170,7 +170,7 @@ export default async function ClientTimelinePage({
       .eq('client_id', id)
       .eq('deleted', false)
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(20)
 
     if (postsError) {
       console.error('[ClientTimelinePage] Error fetching posts:', postsError)
@@ -347,6 +347,7 @@ export default async function ClientTimelinePage({
             clientId={id}
             currentUserId={user.id}
             initialPosts={postsWithAuthors as Post[] || []}
+            facilityId={client.facility_id}
           />
         </div>
       </div>
