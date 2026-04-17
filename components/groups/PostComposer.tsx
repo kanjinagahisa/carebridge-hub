@@ -1,86 +1,253 @@
 'use client'
 
-import { useState } from 'react'
-import { Send } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Send, Paperclip, X, FileText, Video, Image as ImageIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { POST_SIDES } from '@/lib/constants'
+
+const MAX_FILES = 10
+const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50MB
 
 interface PostComposerProps {
   groupId: string
   currentUserId: string
+  facilityId: string
   onPostCreated?: () => void
+}
+
+function getFileType(file: File): 'image' | 'video' | 'pdf' | null {
+  if (isHeic(file)) return 'image'
+  if (file.type.startsWith('image/')) return 'image'
+  if (file.type.startsWith('video/')) return 'video'
+  if (file.type === 'application/pdf') return 'pdf'
+  return null
+}
+
+function getFileExt(file: File): string {
+  const parts = file.name.split('.')
+  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : 'bin'
+}
+
+function isHeic(file: File): boolean {
+  return (
+    file.type === 'image/heic' ||
+    file.type === 'image/heif' ||
+    /\.heic$/i.test(file.name) ||
+    /\.heif$/i.test(file.name)
+  )
+}
+
+async function convertHeicToJpeg(file: File): Promise<File> {
+  const { default: heic2any } = await import('heic2any')
+  const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.85 })
+  const blob = Array.isArray(result) ? result[0] : result
+  const newName = file.name.replace(/\.(heic|heif)$/i, '.jpg')
+  return new File([blob], newName, { type: 'image/jpeg' })
 }
 
 /**
  * 投稿作成コンポーネント
- * textarea + 送信ボタン
+ * テキスト + 添付ファイル（画像・動画・PDF、最大10件、1件50MB以内）
  */
 export default function PostComposer({
   groupId,
   currentUserId,
+  facilityId,
   onPostCreated,
 }: PostComposerProps) {
   const [content, setContent] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    const errors: string[] = []
+    const valid: File[] = []
+
+    for (const file of files) {
+      if (file.size > MAX_FILE_SIZE) {
+        errors.push(`「${file.name}」は50MBを超えています。`)
+        continue
+      }
+      const isAccepted =
+        file.type.startsWith('image/') ||
+        file.type.startsWith('video/') ||
+        file.type === 'application/pdf' ||
+        isHeic(file)
+      if (!isAccepted) {
+        errors.push(`「${file.name}」は対応していないファイル形式です（画像・動画・PDFのみ）。`)
+        continue
+      }
+      valid.push(file)
+    }
+
+    const combined = [...selectedFiles, ...valid]
+    if (combined.length > MAX_FILES) {
+      errors.push(`添付ファイルは最大${MAX_FILES}件です。`)
+      setSelectedFiles(combined.slice(0, MAX_FILES))
+    } else {
+      setSelectedFiles(combined)
+    }
+
+    if (errors.length > 0) {
+      alert(errors.join('\n'))
+    }
+
+    e.target.value = ''
+  }
+
+  const removeFile = (index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+  }
 
   const handleSubmit = async () => {
-    if (!content.trim() || isSubmitting) return
+    if ((!content.trim() && selectedFiles.length === 0) || isSubmitting) return
 
     setIsSubmitting(true)
+    const supabase = createClient()
+
+    let post: { id: string } | null = null
+    const uploadedPaths: string[] = []
+    const uploadedFiles: File[] = []
+
+    const rollback = async () => {
+      if (uploadedPaths.length > 0) {
+        const { error: removeError } = await supabase.storage
+          .from('attachments')
+          .remove(uploadedPaths)
+        if (removeError) {
+          console.error('[PostComposer] Rollback: failed to remove storage files:', removeError)
+        }
+      }
+      if (post) {
+        const { error: deleteError } = await supabase
+          .from('posts')
+          .update({ deleted: true })
+          .eq('id', post.id)
+          .eq('author_id', currentUserId)
+        if (deleteError) {
+          console.error('[PostComposer] Rollback: failed to mark post as deleted:', deleteError)
+        }
+      }
+    }
+
     try {
-      const supabase = createClient()
-      const { data: post, error } = await supabase
+      // 1. post INSERT
+      const { data: postData, error: postError } = await supabase
         .from('posts')
         .insert({
           group_id: groupId,
           author_id: currentUserId,
-          side: POST_SIDES.CARE, // v1では介護側のみ
+          side: POST_SIDES.CARE,
           body: content.trim(),
         })
         .select()
         .single()
 
-      if (error) {
-        console.error('Failed to create post:', error)
+      if (postError || !postData) {
+        console.error('[PostComposer] Failed to create post:', postError)
         alert('投稿の作成に失敗しました。')
         return
       }
+      post = postData
+      const postId = postData.id
 
-      // Web Push通知を送信
-      if (post) {
-        try {
-          const response = await fetch('/api/push/notify', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              postId: post.id,
-              groupId: groupId,
-            }),
-          })
+      // 2. ファイルを storage にアップロード
+      let uploadFailed = false
 
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}))
-            console.error('[PostComposer] Failed to send push notification:', errorData)
-          } else {
-            const result = await response.json()
-            console.log('[PostComposer] Push notification sent:', result)
+      for (const file of selectedFiles) {
+        let uploadFile = file
+        if (isHeic(file)) {
+          try {
+            uploadFile = await convertHeicToJpeg(file)
+          } catch (convErr) {
+            console.error('[PostComposer] HEIC conversion failed:', file.name, convErr)
+            uploadFailed = true
+            break
           }
-        } catch (error) {
-          console.error('[PostComposer] Error sending push notification:', error)
+        }
+
+        const ext = getFileExt(uploadFile)
+        const storagePath = `${groupId}/${crypto.randomUUID()}.${ext}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('attachments')
+          .upload(storagePath, uploadFile, { upsert: false })
+
+        if (uploadError) {
+          console.error('[PostComposer] Failed to upload file:', file.name, uploadError)
+          uploadFailed = true
+          break
+        }
+        uploadedPaths.push(storagePath)
+        uploadedFiles.push(uploadFile)
+      }
+
+      if (uploadFailed) {
+        await rollback()
+        alert('ファイルのアップロードに失敗しました。投稿を取り消しました。')
+        return
+      }
+
+      // 3. attachments INSERT
+      if (uploadedPaths.length > 0) {
+        const attachmentRows: {
+          post_id: string; facility_id: string; client_id: null
+          file_url: string; file_name: string; file_type: 'image' | 'video' | 'pdf'
+        }[] = []
+        for (let i = 0; i < uploadedPaths.length; i++) {
+          const fileType = getFileType(uploadedFiles[i])
+          if (!fileType) {
+            await rollback()
+            alert('対応していないファイル形式です。投稿を取り消しました。')
+            return
+          }
+          attachmentRows.push({
+            post_id: postId,
+            facility_id: facilityId,
+            client_id: null,
+            file_url: uploadedPaths[i],
+            file_name: uploadedFiles[i].name,
+            file_type: fileType,
+          })
+        }
+
+        const { error: attachError } = await supabase.from('attachments').insert(attachmentRows)
+
+        if (attachError) {
+          console.error('[PostComposer] Failed to insert attachments:', attachError)
+          await rollback()
+          alert('添付ファイルの保存に失敗しました。投稿を取り消しました。')
+          return
         }
       }
 
-      // 成功したらテキストをクリア
-      setContent('')
-
-      // 親コンポーネントに通知
-      if (onPostCreated) {
-        onPostCreated()
+      // 4. Web Push 通知
+      try {
+        const response = await fetch('/api/push/notify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postId, groupId }),
+        })
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          console.error('[PostComposer] Failed to send push notification:', errorData)
+        } else {
+          const result = await response.json()
+          console.log('[PostComposer] Push notification sent:', result)
+        }
+      } catch (err) {
+        console.error('[PostComposer] Error sending push notification:', err)
       }
+
+      // 5. 成功 → 状態リセット
+      setContent('')
+      setSelectedFiles([])
+      if (onPostCreated) onPostCreated()
     } catch (error) {
-      console.error('Failed to create post:', error)
+      console.error('[PostComposer] Unexpected error:', error)
+      await rollback()
       alert('投稿の作成に失敗しました。')
     } finally {
       setIsSubmitting(false)
@@ -88,12 +255,13 @@ export default function PostComposer({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // Cmd/Ctrl + Enter で送信
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
       e.preventDefault()
       handleSubmit()
     }
   }
+
+  const canSubmit = (content.trim().length > 0 || selectedFiles.length > 0) && !isSubmitting
 
   return (
     <div className="bg-white rounded-xl shadow-sm p-4 space-y-3">
@@ -105,10 +273,70 @@ export default function PostComposer({
         rows={4}
         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent resize-none"
       />
-      <div className="flex justify-end">
+
+      {/* 選択済みファイル一覧 */}
+      {selectedFiles.length > 0 && (
+        <ul className="space-y-1">
+          {selectedFiles.map((file, i) => {
+            const type = getFileType(file)
+            return (
+              <li
+                key={i}
+                className="flex items-center gap-2 text-sm text-gray-700 bg-gray-50 rounded-lg px-3 py-1.5"
+              >
+                {type === 'image' ? (
+                  <ImageIcon size={14} className="text-blue-500 flex-shrink-0" />
+                ) : type === 'video' ? (
+                  <Video size={14} className="text-purple-500 flex-shrink-0" />
+                ) : (
+                  <FileText size={14} className="text-red-500 flex-shrink-0" />
+                )}
+                <span className="truncate flex-1">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => removeFile(i)}
+                  disabled={isSubmitting}
+                  className="text-gray-400 hover:text-gray-600 flex-shrink-0 disabled:opacity-40"
+                  aria-label={`${file.name} を削除`}
+                >
+                  <X size={14} />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      <div className="flex items-center justify-between">
+        {/* ファイル添付ボタン */}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isSubmitting || selectedFiles.length >= MAX_FILES}
+          className="flex items-center gap-1.5 px-3 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          aria-label="ファイルを添付"
+        >
+          <Paperclip size={16} />
+          <span>添付</span>
+          {selectedFiles.length > 0 && (
+            <span className="text-xs text-gray-400">
+              ({selectedFiles.length}/{MAX_FILES})
+            </span>
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="image/*,video/*,application/pdf"
+          onChange={handleFileSelect}
+          className="hidden"
+        />
+
+        {/* 送信ボタン */}
         <button
           onClick={handleSubmit}
-          disabled={!content.trim() || isSubmitting}
+          disabled={!canSubmit}
           className="px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
           <Send size={18} />
@@ -118,7 +346,3 @@ export default function PostComposer({
     </div>
   )
 }
-
-
-
-

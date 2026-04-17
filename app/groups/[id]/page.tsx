@@ -165,7 +165,7 @@ export default async function GroupTimelinePage({
       .eq('group_id', params.id)
       .eq('deleted', false)
       .order('created_at', { ascending: false })
-      .limit(50)
+      .limit(20)
 
     if (postsError) {
       console.error('[GroupTimelinePage] Error fetching posts:', postsError)
@@ -224,6 +224,7 @@ export default async function GroupTimelinePage({
             currentUserId={user.id}
             initialPosts={posts as Post[] || []}
             userRole={userRole}
+            facilityId={group.facility_id}
           />
         </div>
       </div>
