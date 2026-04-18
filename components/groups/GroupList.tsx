@@ -95,16 +95,14 @@ export default function GroupList({ groups, isAdmin }: GroupListProps) {
         </div>
       )}
 
-      {/* 管理者のみ：新しいグループ作成 FAB（clients の FAB と同じ見た目） */}
-      {isAdmin && (
-        <Link
-          href="/groups/new"
-          className="fixed bottom-24 right-4 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors z-30"
-          aria-label="新しいグループを作成"
-        >
-          <Plus size={24} />
-        </Link>
-      )}
+      {/* 新しいグループ作成 FAB（clients の FAB と同じ見た目） */}
+      <Link
+        href="/groups/new"
+        className="fixed bottom-24 right-4 w-14 h-14 bg-primary text-white rounded-full shadow-lg flex items-center justify-center hover:bg-blue-700 transition-colors z-30"
+        aria-label="新しいグループを作成"
+      >
+        <Plus size={24} />
+      </Link>
     </div>
   )
 }
