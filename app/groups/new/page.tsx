@@ -146,6 +146,17 @@ export default function NewGroupPage() {
         return
       }
 
+      // 作成者本人を必ず group_members に追加
+      const { error: ownerMemberErr } = await supabase.from('group_members').insert({
+        group_id: newGroup.id,
+        user_id: userId,
+      })
+      if (ownerMemberErr) {
+        setError(ownerMemberErr.message || 'グループの作成に失敗しました。')
+        setIsSaving(false)
+        return
+      }
+
       const ids = Array.from(selectedUserIds)
       if (ids.length > 0) {
         let anyFailed = false

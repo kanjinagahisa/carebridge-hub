@@ -110,52 +110,75 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // 2) groupId を確定
+    // 2) groupId を確定（ない場合は新規グループ作成画面用として続行）
     const { searchParams } = new URL(req.url)
     const groupId = searchParams.get("groupId")
-    if (!groupId) {
-      return NextResponse.json({ error: "groupId is required" }, { status: 400 });
-    }
 
-    // 3) 呼び出し元がそのグループの active member であることを確認
-    const { data: membership, error: memberErr } = await supabaseAdmin
-      .from("group_members")
-      .select("id")
-      .eq("group_id", groupId)
-      .eq("user_id", userId)
-      .eq("deleted", false)
-      .maybeSingle();
-    if (memberErr) {
-      return NextResponse.json({ error: "Failed to verify membership" }, { status: 500 });
-    }
-    if (!membership) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
+    let facilityId: string
+    let activeMemberIds = new Set<string>()
 
-    // 4) グループの施設IDを取得
-    const { data: group, error: groupErr } = await supabaseAdmin
-      .from("groups")
-      .select("facility_id")
-      .eq("id", groupId)
-      .eq("deleted", false)
-      .maybeSingle();
-    if (groupErr || !group) {
-      return NextResponse.json({ error: "Group not found" }, { status: 404 });
-    }
-    const facilityId = group.facility_id
+    if (groupId) {
+      // 仕様A: 既存グループ用
 
-    // 5) グループの active member user_id 一覧を取得（招待候補から除外するため）
-    const { data: activeMembers, error: activeMembersErr } = await supabaseAdmin
-      .from("group_members")
-      .select("user_id")
-      .eq("group_id", groupId)
-      .eq("deleted", false);
-    if (activeMembersErr) {
-      return NextResponse.json({ error: "Failed to fetch active members" }, { status: 500 });
+      // 3) 呼び出し元がそのグループの active member であることを確認
+      const { data: membership, error: memberErr } = await supabaseAdmin
+        .from("group_members")
+        .select("id")
+        .eq("group_id", groupId)
+        .eq("user_id", userId)
+        .eq("deleted", false)
+        .maybeSingle();
+      if (memberErr) {
+        return NextResponse.json({ error: "Failed to verify membership" }, { status: 500 });
+      }
+      if (!membership) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+
+      // 4) グループの施設IDを取得
+      const { data: group, error: groupErr } = await supabaseAdmin
+        .from("groups")
+        .select("facility_id")
+        .eq("id", groupId)
+        .eq("deleted", false)
+        .maybeSingle();
+      if (groupErr || !group) {
+        return NextResponse.json({ error: "Group not found" }, { status: 404 });
+      }
+      facilityId = group.facility_id
+
+      // 5) グループの active member user_id 一覧を取得（招待候補から除外するため）
+      const { data: activeMembers, error: activeMembersErr } = await supabaseAdmin
+        .from("group_members")
+        .select("user_id")
+        .eq("group_id", groupId)
+        .eq("deleted", false);
+      if (activeMembersErr) {
+        return NextResponse.json({ error: "Failed to fetch active members" }, { status: 500 });
+      }
+      activeMemberIds = new Set<string>(
+        (activeMembers ?? []).map((m: any) => m.user_id as string)
+      )
+    } else {
+      // 仕様B: 新規グループ作成画面用
+
+      // 3) ログインユーザーの current facility を取得
+      const { data: userFacility, error: facilityErr } = await supabaseAdmin
+        .from("user_facility_roles")
+        .select("facility_id")
+        .eq("user_id", userId)
+        .eq("deleted", false)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (facilityErr || !userFacility) {
+        return NextResponse.json({ error: "Facility not found" }, { status: 404 });
+      }
+      facilityId = userFacility.facility_id
+
+      // group_members 除外なし（グループ未作成）。自分自身のみ除外
+      activeMemberIds = new Set<string>([userId])
     }
-    const activeMemberIds = new Set<string>(
-      (activeMembers ?? []).map((m: any) => m.user_id as string)
-    )
 
     // 6) 招待候補（施設スタッフ一覧）を返す
     //    - users.deleted = true は除外
