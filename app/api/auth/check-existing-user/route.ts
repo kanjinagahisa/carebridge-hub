@@ -18,37 +18,28 @@ export async function POST(request: NextRequest) {
 
     const adminSupabase = createAdminClient()
 
-    // auth.usersテーブルで既存ユーザーをチェック（emailで1件検索）
-    const { data: existingUser, error: authUserError } = await adminSupabase
-      .schema('auth')
-      .from('users')
-      .select('id, email, email_confirmed_at, created_at')
-      .eq('email', email)
-      .maybeSingle()
+    // auth.users を listUsers で全件取得しメールアドレスで絞り込む
+    const { data, error } = await adminSupabase.auth.admin.listUsers({
+      page: 1,
+      perPage: 1000,
+    })
 
-    if (authUserError) {
-      console.error('[CheckExistingUser] Error fetching auth user:', authUserError)
+    if (error) {
+      console.error('[CheckExistingUser] Error fetching users:', error)
       return NextResponse.json(
         { error: 'ユーザー確認中にエラーが発生しました' },
         { status: 500 }
       )
     }
 
-    if (existingUser) {
-      // 既存ユーザーが見つかった場合、public.usersテーブルもチェック
-      const { data: publicUser, error: publicUserError } = await adminSupabase
-        .from('users')
-        .select('id, email, created_at')
-        .eq('id', existingUser.id)
-        .eq('deleted', false)
-        .maybeSingle()
+    const users = data?.users ?? []
+    const matchedUser = users.find((u) => u.email === email)
 
+    if (matchedUser) {
       return NextResponse.json({
         exists: true,
-        emailConfirmed: !!existingUser.email_confirmed_at,
-        userId: existingUser.id,
-        publicUserExists: !!publicUser,
-        publicUserCreatedAt: publicUser?.created_at || null,
+        emailConfirmed: !!matchedUser.email_confirmed_at,
+        userId: matchedUser.id,
       })
     }
 

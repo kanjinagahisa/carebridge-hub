@@ -19,6 +19,27 @@ export default function SignupPage() {
   const [passwordErrors, setPasswordErrors] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendMessage, setResendMessage] = useState('')
+
+  const handleResend = async () => {
+    setResendLoading(true)
+    setResendMessage('')
+    const supabase = createClient()
+    const { error: resendError } = await supabase.auth.resend({
+      type: 'signup',
+      email: formData.email,
+      options: {
+        emailRedirectTo: `${window.location.origin}/login`,
+      },
+    })
+    if (resendError) {
+      setResendMessage(resendError.message)
+    } else {
+      setResendMessage('確認メールを再送しました')
+    }
+    setResendLoading(false)
+  }
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,7 +80,7 @@ export default function SignupPage() {
           return
         }
         if (checkData.exists && !checkData.emailConfirmed) {
-          setError('success')
+          setError('pending')
           setLoading(false)
           return
         }
@@ -133,13 +154,15 @@ export default function SignupPage() {
       console.log('[Signup] Session exists, redirecting to home')
       router.push('/home')
       router.refresh()
-    } else {
-      // メール確認が必要な場合（新規ユーザー）
-      // Database Triggerによりusersテーブルには既にレコードが作成されています
+    } else if (!authData.user.email_confirmed_at) {
+      // 新規ユーザーかつ未確認（= 確認メールフロー）のみ success に流す
       console.log('[Signup] No session - email confirmation required')
-      console.log('[Signup] User email confirmation status', { hasConfirmedAt: !!authData.user.email_confirmed_at })
-      console.log('[Signup] Check Supabase Dashboard -> Authentication -> Users for email confirmation status')
       setError('success')
+      setLoading(false)
+    } else {
+      // 既存ユーザーと判定できるケース（user_repeated_signup など）
+      console.log('[Signup] Existing user detected in final branch')
+      setError('このメールアドレスは既に登録されています。ログインしてください。')
       setLoading(false)
     }
   }
@@ -260,7 +283,23 @@ export default function SignupPage() {
                 確認メール送信。メールに記載のURLをクリックしていただき、アカウント登録を完了させてください。
               </div>
             )}
-            {error && error !== 'success' && (
+            {error && error === 'pending' && (
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm">
+                <p>このメールアドレスは登録途中です。確認メールをご確認ください。</p>
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendLoading}
+                  className="mt-2 text-primary underline hover:no-underline disabled:opacity-50"
+                >
+                  {resendLoading ? '送信中...' : '確認メールを再送しますか？'}
+                </button>
+                {resendMessage && (
+                  <p className="mt-1">{resendMessage}</p>
+                )}
+              </div>
+            )}
+            {error && error !== 'success' && error !== 'pending' && (
               <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
