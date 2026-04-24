@@ -56,8 +56,6 @@ function InviteCreateContent() {
 
     if (facilityId) {
       checkUserRole()
-    } else {
-      router.push('/settings/facility')
     }
   }, [facilityId, router])
 
@@ -164,7 +162,17 @@ function InviteCreateContent() {
     }
   }
 
-  if (!facilityId || userRole === null) {
+  if (!facilityId) {
+    return (
+      <div className="min-h-screen bg-gray-100 pb-20 flex items-center justify-center">
+        <div className="bg-white rounded-xl shadow-sm p-6 text-center space-y-3">
+          <p className="text-gray-600">施設が指定されていません。メニューからやり直してください。</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (userRole === null) {
     return (
       <div className="min-h-screen bg-gray-100 pb-20 flex items-center justify-center">
         <p className="text-gray-600">読み込み中...</p>
@@ -178,7 +186,7 @@ function InviteCreateContent() {
         <div className="bg-white rounded-xl shadow-sm p-6 text-center space-y-3">
           <p className="text-gray-600">管理者のみ招待リンクを作成できます。</p>
           <Link
-            href="/settings/facility"
+            href={`/settings/facility?facility_id=${facilityId}`}
             className="mt-2 px-4 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-700 transition-colors inline-block"
           >
             施設設定へ戻る
@@ -195,7 +203,7 @@ function InviteCreateContent() {
         <div className="px-4 pt-3 pb-2">
           <div className="flex items-center justify-between">
             <Link
-              href="/settings/facility"
+              href={`/settings/facility?facility_id=${facilityId}`}
               className="p-2 -ml-2 text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ChevronLeft size={20} className="inline-block mr-1" />
@@ -245,7 +253,7 @@ function InviteCreateContent() {
               </p>
             </div>
             <Link
-              href="/settings/facility"
+              href={`/settings/facility?facility_id=${facilityId}`}
               className="block w-full px-4 py-2 text-sm font-medium text-center text-white bg-primary rounded-lg hover:bg-blue-700 transition-colors"
             >
               施設設定へ戻る

@@ -155,9 +155,19 @@ export default async function FacilitySettingsPage({ searchParams }: { searchPar
       )
     }
 
+    // users.current_facility_id を取得し、selectedFacilityId の決定に使用する
+    const { data: userProfile } = await adminSupabase
+      .from('users')
+      .select('current_facility_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    const currentFacilityId = userProfile?.current_facility_id ?? null
+
     const selectedFacilityId =
       searchParams?.facility_id && activeFacilityIds.includes(searchParams.facility_id)
         ? searchParams.facility_id
+        : currentFacilityId && activeFacilityIds.includes(currentFacilityId)
+        ? currentFacilityId
         : activeFacilityIds[0]
 
     // ユーザーのロールを取得（admin/staff判定用）
