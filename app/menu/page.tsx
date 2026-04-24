@@ -129,24 +129,28 @@ export default async function MenuPage() {
       })
     }
 
-    const isAdmin = userFacilities?.some((uf) => uf.role === ROLES.ADMIN) || false
-    // 最新の施設IDを取得（招待リンクと施設設定リンクで使用）
-    const latestFacilityId = userFacilities && userFacilities.length > 0 
-      ? userFacilities[0].facility_id 
-      : null
-    // 最新の施設名を取得
-    const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-    const facilityName = Array.isArray(latestFacility)
-      ? latestFacility[0]?.name
-      : (latestFacility as { name?: string } | null | undefined)?.name
+    // current_facility_id を取得し、所属施設に含まれていれば selectedFacilityId にする
+    const currentFacilityId = profile?.current_facility_id || null
+    const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
+    const selectedFacilityId =
+      currentFacilityId && facilityIds.includes(currentFacilityId)
+        ? currentFacilityId
+        : userFacilities?.[0]?.facility_id ?? null
+
+    // selectedFacilityId に対応する施設情報を取得
+    const selectedFacilityRow = userFacilities?.find((uf) => uf.facility_id === selectedFacilityId)
+    const selectedFacilityData = selectedFacilityRow?.facilities as { name?: string } | { name?: string }[] | null | undefined
+    const facilityName = Array.isArray(selectedFacilityData)
+      ? selectedFacilityData[0]?.name
+      : (selectedFacilityData as { name?: string } | null | undefined)?.name
+
+    // isAdmin は selectedFacilityId に対応するロールで判定
+    const isAdmin = selectedFacilityRow?.role === ROLES.ADMIN
+
     console.log('[MenuPage] User facilities count:', userFacilities?.length || 0)
     console.log('[MenuPage] User roles:', userFacilities?.map((uf) => uf.role) || [])
     console.log('[MenuPage] User is admin:', isAdmin)
-    console.log('[MenuPage] Latest facility ID:', latestFacilityId)
-
-    // current_facility_id を取得（施設切り替えUIで使用）
-    const currentFacilityId = profile?.current_facility_id || null
-    const settingsFacilityId = currentFacilityId ?? latestFacilityId
+    console.log('[MenuPage] Selected facility ID:', selectedFacilityId)
 
     // 施設切り替えUI用のデータを準備
     const facilitiesForSwitcher = userFacilities?.map((uf) => {
@@ -206,10 +210,10 @@ export default async function MenuPage() {
 
           {/* メニュー項目 */}
           <div className="bg-white rounded-xl shadow-sm">
-            {isAdmin && latestFacilityId && (
+            {isAdmin && selectedFacilityId && (
               <>
                 <Link
-                  href={`/settings/facility/invite?facility_id=${latestFacilityId}`}
+                  href={`/settings/facility/invite?facility_id=${selectedFacilityId}`}
                   className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"
                 >
                   <UserPlus size={20} className="text-gray-600" />
@@ -217,9 +221,9 @@ export default async function MenuPage() {
                 </Link>
               </>
             )}
-            {(settingsFacilityId || latestFacilityId) && (
+            {selectedFacilityId && (
               <Link
-                href={`/settings/facility?facility_id=${settingsFacilityId || latestFacilityId}`}
+                href={`/settings/facility?facility_id=${selectedFacilityId}`}
                 className="flex items-center gap-3 p-4 border-b border-gray-200 hover:bg-gray-50"
               >
                 <Settings size={20} className="text-gray-600" />

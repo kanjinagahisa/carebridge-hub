@@ -120,30 +120,42 @@ export default async function ClientsPage() {
       console.error('[ClientsPage] Error fetching user facilities:', facilitiesError)
     }
 
-    // 最新の施設（最後に参加した施設）を表示
-    const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-    const facilityName = Array.isArray(latestFacility)
-      ? latestFacility[0]?.name
-      : (latestFacility as { name?: string } | null | undefined)?.name
-    
-    // 最新の施設IDのみを取得（表示されている施設名に対応する施設）
-    const latestFacilityId = userFacilities?.[0]?.facility_id
+    const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
+
+    // users.current_facility_id を取得し、所属施設に含まれていればそれを selectedFacilityId にする
+    const { data: userRow } = await adminSupabase
+      .from('users')
+      .select('current_facility_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    const currentFacilityId = userRow?.current_facility_id ?? null
+    const selectedFacilityId =
+      currentFacilityId && facilityIds.includes(currentFacilityId)
+        ? currentFacilityId
+        : userFacilities?.[0]?.facility_id
+
+    // selectedFacilityId に対応する施設情報を取得
+    const selectedFacilityRow = userFacilities?.find((uf) => uf.facility_id === selectedFacilityId)
+    const selectedFacilityData = selectedFacilityRow?.facilities as { name?: string } | { name?: string }[] | null | undefined
+    const facilityName = Array.isArray(selectedFacilityData)
+      ? selectedFacilityData[0]?.name
+      : (selectedFacilityData as { name?: string } | null | undefined)?.name
 
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[ClientsPage] Facility info', { latestFacilityId, facilitiesCount: userFacilities?.length ?? 0 })
+      console.log('[ClientsPage] Facility info', { selectedFacilityId, facilitiesCount: userFacilities?.length ?? 0 })
     }
 
     // 利用者を取得（最新の施設の利用者のみ）
     let clients: Client[] = []
     let clientsError: any = null
 
-    if (latestFacilityId) {
-      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching clients for latest facility:', latestFacilityId)
+    if (selectedFacilityId) {
+      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] Fetching clients for selected facility:', selectedFacilityId)
       // adminSupabaseを使用してRLSをバイパス
       const { data, error } = await adminSupabase
         .from('clients')
         .select('*')
-        .eq('facility_id', latestFacilityId)
+        .eq('facility_id', selectedFacilityId)
         .eq('deleted', false)
         .order('name', { ascending: true })
 
@@ -153,11 +165,11 @@ export default async function ClientsPage() {
       } else {
         clients = (data as Client[]) || []
         if (process.env.NODE_ENV !== 'production') {
-          console.log('[ClientsPage] Fetched clients', { count: clients.length, facilityId: latestFacilityId })
+          console.log('[ClientsPage] Fetched clients', { count: clients.length, facilityId: selectedFacilityId })
         }
       }
     } else {
-      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No latest facility ID found, skipping clients fetch')
+      if (process.env.NODE_ENV !== 'production') console.log('[ClientsPage] No selected facility ID found, skipping clients fetch')
     }
 
     // 利用者ごとの最新投稿と未読数を取得

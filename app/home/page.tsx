@@ -109,41 +109,29 @@ export default async function HomePage({
       console.error('[HomePage] Error fetching user facilities with admin client:', facilitiesError)
     }
 
-    // クエリパラメータで指定された施設IDがあれば、それを優先的に表示
-    // 招待リンクから参加した場合など、特定の施設を表示したい場合に使用
-    let selectedFacility: { name?: string } | null = null
-    let facilityName: string | undefined = undefined
-    let selectedFacilityId: string | undefined = undefined
-    
-    if (requestedFacilityId) {
-      // リクエストされた施設IDがユーザーの所属施設に含まれているか確認
-      const requestedFacility = userFacilities?.find(
-        (uf) => uf.facility_id === requestedFacilityId
-      )
-      if (requestedFacility) {
-        const facilityData = requestedFacility.facilities as { name?: string } | { name?: string }[] | null | undefined
-        selectedFacility = Array.isArray(facilityData)
-          ? facilityData[0] || null
-          : (facilityData as { name?: string } | null | undefined) || null
-        facilityName = selectedFacility?.name
-        selectedFacilityId = requestedFacilityId
-        console.log('[HomePage] Using requested facility', { selectedFacilityId: requestedFacilityId })
-      } else {
-        console.warn('[HomePage] Requested facility ID not found in user facilities:', requestedFacilityId)
-      }
-    }
-    
-    // クエリパラメータで指定がない場合、または指定された施設が見つからない場合、最新の施設を表示
-    if (!facilityName || !selectedFacilityId) {
-      const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-      facilityName = Array.isArray(latestFacility)
-        ? latestFacility[0]?.name
-        : (latestFacility as { name?: string } | null | undefined)?.name
-      // 最新の施設IDを取得（表示されている施設名に対応する施設）
-      selectedFacilityId = userFacilities?.[0]?.facility_id
-      console.log('[HomePage] Using latest facility', { selectedFacilityId })
-    }
-    
+    const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
+
+    // users.current_facility_id を取得し、所属施設に含まれていればそれを selectedFacilityId にする
+    const { data: userRow } = await adminSupabase
+      .from('users')
+      .select('current_facility_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    const currentFacilityId = userRow?.current_facility_id ?? null
+    const selectedFacilityId =
+      requestedFacilityId && facilityIds.includes(requestedFacilityId)
+        ? requestedFacilityId
+        : currentFacilityId && facilityIds.includes(currentFacilityId)
+        ? currentFacilityId
+        : userFacilities?.[0]?.facility_id
+
+    // selectedFacilityId に対応する施設情報を取得
+    const selectedFacilityRow = userFacilities?.find((uf) => uf.facility_id === selectedFacilityId)
+    const selectedFacilityData = selectedFacilityRow?.facilities as { name?: string } | { name?: string }[] | null | undefined
+    const facilityName = Array.isArray(selectedFacilityData)
+      ? selectedFacilityData[0]?.name
+      : (selectedFacilityData as { name?: string } | null | undefined)?.name
+
     console.log('[HomePage] Selected facility', { selectedFacilityId })
     console.log('[HomePage] facilities', { facilitiesCount: userFacilities?.length ?? 0 })
 
@@ -152,33 +140,21 @@ export default async function HomePage({
       redirect('/setup/choose')
     }
 
-    // ✅ 保険A：current_facility_id が空/ズレていても home 初回ロードで自動復旧
-    // Pushトグルは users.current_facility_id を見るため、ここで確実に整える
-    try {
-      const { data: userRow, error: userRowError } = await adminSupabase
-        .from('users')
-        .select('current_facility_id')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      if (userRowError) {
-        console.warn('[HomePage] Failed to fetch users.current_facility_id:', userRowError)
-      } else {
-        const current = userRow?.current_facility_id ?? null
-        if (current !== selectedFacilityId) {
-          const { error: updErr } = await adminSupabase
-            .from('users')
-            .update({ current_facility_id: selectedFacilityId })
-            .eq('id', user.id)
-          if (updErr) {
-            console.warn('[HomePage] Failed to update current_facility_id:', updErr)
-          } else {
-            console.log('[HomePage] current_facility_id restored:', selectedFacilityId)
-          }
+    // current_facility_id が未設定の場合のみ補完する（FacilitySwitcher の状態を壊さないため）
+    if (!currentFacilityId && selectedFacilityId) {
+      try {
+        const { error: updErr } = await adminSupabase
+          .from('users')
+          .update({ current_facility_id: selectedFacilityId })
+          .eq('id', user.id)
+        if (updErr) {
+          console.warn('[HomePage] Failed to initialize current_facility_id:', updErr)
+        } else {
+          console.log('[HomePage] current_facility_id initialized:', selectedFacilityId)
         }
+      } catch (e) {
+        console.warn('[HomePage] current_facility_id init exception:', e)
       }
-    } catch (e) {
-      console.warn('[HomePage] current_facility restore exception:', e)
     }
 
     // ログインユーザーが所属しているグループIDを取得（group_members ベース）
@@ -199,6 +175,7 @@ export default async function HomePage({
         .from('groups')
         .select('id')
         .in('id', myGroupIds)
+        .eq('facility_id', selectedFacilityId)
         .eq('deleted', false)
       if (groupsError) {
         console.error('[HomePage] Error fetching groups with admin client:', groupsError)
