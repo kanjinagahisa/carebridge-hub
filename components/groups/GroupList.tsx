@@ -72,7 +72,7 @@ export default function GroupList({ groups, isAdmin }: GroupListProps) {
             まだグループが登録されていません。
           </p>
           <p className="text-sm text-gray-500 mt-2">
-            管理者の方がグループを作成すると、ここに一覧が表示されます。
+            グループを作成すると、ここに一覧が表示されます。
           </p>
           {isAdmin && (
             <p className="text-sm text-gray-500 mt-2">
