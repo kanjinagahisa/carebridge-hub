@@ -118,18 +118,33 @@ export default async function GroupsPage() {
     }
 
     const facilityIds = userFacilities?.map((uf) => uf.facility_id) || []
-    // 最新の施設（最後に参加した施設）を表示
-    const latestFacility = userFacilities?.[0]?.facilities as { name?: string } | { name?: string }[] | null | undefined
-    const facilityName = Array.isArray(latestFacility)
-      ? latestFacility[0]?.name
-      : (latestFacility as { name?: string } | null | undefined)?.name
 
-    // ユーザーのロールを取得（admin かどうか）- 最新の施設のロールを使用
-    const userRole = userFacilities?.[0]?.role
+    // users.current_facility_id を取得し、所属施設に含まれていればそれを selectedFacilityId にする
+    const { data: userRow } = await adminSupabase
+      .from('users')
+      .select('current_facility_id')
+      .eq('id', user.id)
+      .maybeSingle()
+    const currentFacilityId = userRow?.current_facility_id ?? null
+    const selectedFacilityId =
+      currentFacilityId && facilityIds.includes(currentFacilityId)
+        ? currentFacilityId
+        : userFacilities?.[0]?.facility_id
+
+    // selectedFacilityId に対応する施設情報を取得
+    const selectedFacilityRow = userFacilities?.find((uf) => uf.facility_id === selectedFacilityId)
+    const selectedFacilityData = selectedFacilityRow?.facilities as { name?: string } | { name?: string }[] | null | undefined
+    const facilityName = Array.isArray(selectedFacilityData)
+      ? selectedFacilityData[0]?.name
+      : (selectedFacilityData as { name?: string } | null | undefined)?.name
+
+    // isAdmin は selectedFacilityId に対応するロールで判定
+    const userRole = selectedFacilityRow?.role
     const isAdmin = userRole === ROLES.ADMIN
 
     if (process.env.NODE_ENV !== "production") console.log('[GroupsPage] Facility info', {
       facilityIdsCount: facilityIds.length,
+      selectedFacilityId,
       isAdmin,
     })
 
@@ -155,6 +170,7 @@ export default async function GroupsPage() {
             .from('groups')
             .select('*')
             .in('id', myGroupIds)
+            .eq('facility_id', selectedFacilityId)
             .eq('deleted', false)
             .order('updated_at', { ascending: false })
 
