@@ -181,17 +181,30 @@ export default async function HomePage({
       console.warn('[HomePage] current_facility restore exception:', e)
     }
 
-    // 自施設の全グループを取得（最新の施設のグループのみ）
-    console.log('[HomePage] Fetching groups for latest facility:', selectedFacilityId)
-    const { data: groups, error: groupsError } = await adminSupabase
-      .from('groups')
-      .select('id')
-      .eq('facility_id', selectedFacilityId)
+    // ログインユーザーが所属しているグループIDを取得（group_members ベース）
+    console.log('[HomePage] Fetching group memberships for user:', user.id)
+    const { data: memberRows, error: memberRowsError } = await adminSupabase
+      .from('group_members')
+      .select('group_id')
+      .eq('user_id', user.id)
       .eq('deleted', false)
-    if (groupsError) {
-      console.error('[HomePage] Error fetching groups with admin client:', groupsError)
+    if (memberRowsError) {
+      console.error('[HomePage] Error fetching group memberships:', memberRowsError)
     }
-    const groupIds = groups?.map((g) => g.id) || []
+    const myGroupIds = (memberRows ?? []).map((m: any) => m.group_id as string).filter(Boolean)
+
+    let groupIds: string[] = []
+    if (myGroupIds.length > 0) {
+      const { data: groups, error: groupsError } = await adminSupabase
+        .from('groups')
+        .select('id')
+        .in('id', myGroupIds)
+        .eq('deleted', false)
+      if (groupsError) {
+        console.error('[HomePage] Error fetching groups with admin client:', groupsError)
+      }
+      groupIds = groups?.map((g) => g.id) || []
+    }
 
     // 自施設の全クライアントを取得（最新の施設のクライアントのみ）
     console.log('[HomePage] Fetching clients for latest facility:', selectedFacilityId)
@@ -284,7 +297,7 @@ export default async function HomePage({
     }
 
     console.log('[HomePage] Rendering with:', {
-      groupsCount: groups?.length || 0,
+      groupsCount: groupIds.length,
       clientsCount: clients?.length || 0,
       recentPostsCount: recentPosts.length,
       unreadCount,
