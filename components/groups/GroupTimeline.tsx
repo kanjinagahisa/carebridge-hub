@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Post } from '@/types/carebridge'
+import type { Post, Attachment } from '@/types/carebridge'
 import PostCard from './PostCard'
 import PostComposer from './PostComposer'
 
@@ -226,7 +226,7 @@ export default function GroupTimeline({
       try {
         const { data: urlData, error: urlError } = await supabase.storage
           .from('attachments')
-          .createSignedUrl(storagePath, 3600)
+          .createSignedUrl(storagePath, 300)
 
         if (urlError) {
           if ((urlError as any).statusCode === '404' || urlError.message?.includes('not found')) {
@@ -274,8 +274,8 @@ export default function GroupTimeline({
             return post
           }
 
-          const updatedAttachments = await Promise.all(
-            post.attachments.map(async (attachment) => {
+          const updatedAttachments = (await Promise.all(
+            post.attachments.map(async (attachment): Promise<Attachment | null> => {
               if (!attachment.file_url) return attachment
 
               if (attachment.file_url.startsWith('http://') || attachment.file_url.startsWith('https://')) {
@@ -290,21 +290,21 @@ export default function GroupTimeline({
                   console.warn(
                     `[GroupTimeline] Could not extract storage path for attachment ${attachment.id}`
                   )
-                  return attachment
+                  return null
                 } catch (error) {
                   console.error(
                     `[GroupTimeline] Error processing signed URL for attachment ${attachment.id}:`,
                     error
                   )
-                  return attachment
+                  return null
                 }
               }
 
               const signedUrl = await createSignedUrlWithRetry(supabase, attachment.file_url, attachment.id)
               if (signedUrl) return { ...attachment, file_url: signedUrl }
-              return { ...attachment, file_url: null as any }
+              return null
             })
-          )
+          )).filter((a): a is Attachment => a !== null)
 
           return { ...post, attachments: updatedAttachments }
         })

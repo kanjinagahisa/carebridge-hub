@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import type { Post } from '@/types/carebridge'
+import type { Post, Attachment } from '@/types/carebridge'
 import PostCard from '@/components/groups/PostCard'
 import ClientPostComposer from './ClientPostComposer'
 
@@ -286,7 +286,7 @@ export default function ClientTimeline({
         )
         const { data: urlData, error: urlError } = await supabase.storage
           .from('attachments')
-          .createSignedUrl(storagePath, 3600)
+          .createSignedUrl(storagePath, 300)
 
         if (urlError) {
           // 404エラーの場合はリトライしない（ファイルが存在しない）
@@ -356,8 +356,8 @@ export default function ClientTimeline({
             return post
           }
 
-          const updatedAttachments = await Promise.all(
-            post.attachments.map(async (attachment) => {
+          const updatedAttachments = (await Promise.all(
+            post.attachments.map(async (attachment): Promise<Attachment | null> => {
               if (!attachment.file_url) {
                 return attachment
               }
@@ -380,18 +380,16 @@ export default function ClientTimeline({
                       return { ...attachment, file_url: signedUrl }
                     }
                   }
-                  // パス抽出に失敗した場合、既存のURLをそのまま使用
                   console.warn(
-                    `[ClientTimeline] Could not extract storage path from signed URL for attachment ${attachment.id}, using existing URL`
+                    `[ClientTimeline] Could not extract storage path from signed URL for attachment ${attachment.id}`
                   )
-                  return attachment
+                  return null
                 } catch (error) {
                   console.error(
                     `[ClientTimeline] Error processing existing signed URL for attachment ${attachment.id}:`,
                     error
                   )
-                  // エラーが発生した場合、既存のURLをそのまま使用
-                  return attachment
+                  return null
                 }
               }
 
@@ -406,12 +404,12 @@ export default function ClientTimeline({
                 return { ...attachment, file_url: signedUrl }
               } else {
                 console.warn(
-                  `[ClientTimeline] Could not generate signed URL for attachment ${attachment.id}, setting file_url to null`
+                  `[ClientTimeline] Could not generate signed URL for attachment ${attachment.id}`
                 )
-                return { ...attachment, file_url: null as any }
+                return null
               }
             })
-          )
+          )).filter((a): a is Attachment => a !== null)
 
           return { ...post, attachments: updatedAttachments }
         })
