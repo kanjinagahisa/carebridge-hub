@@ -52,6 +52,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: 'Forbidden (user mismatch)' }, { status: 403 })
     }
 
+    // role 値バリデーション（null/undefined は許可、それ以外は admin/staff のみ）
+    if (role !== null && role !== undefined && role !== 'admin' && role !== 'staff') {
+      return NextResponse.json({ ok: false, error: 'Invalid role' }, { status: 400 })
+    }
+
     // upsert（復職も成立させるため deleted=false を入れる）
     const { error: upsertError } = await admin
       .from('user_facility_roles')
