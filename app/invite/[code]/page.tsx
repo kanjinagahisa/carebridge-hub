@@ -324,14 +324,14 @@ export default function InviteAcceptPage() {
         console.log('[InviteAcceptPage] User created in public.users successfully')
       }
 
-      // user_facility_rolesに追加（roleはinvite_codesから取得）。API(Service Role)経由でRLS回避
+      // user_facility_rolesに追加。API側でinviteCode検証・role取得・used更新を行う
       const roleRes = await fetch('/api/user-facility-roles/upsert', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           userId: user.id,
           facilityId: inviteData.facility_id,
-          role: inviteData.role || ROLES.STAFF,
+          inviteCode: inviteData.code,
         }),
       })
 
@@ -356,17 +356,6 @@ export default function InviteAcceptPage() {
         const setErr = await setRes.json().catch(() => null)
         console.error('[InviteAcceptPage] Failed to set current facility:', setErr)
         throw new Error(setErr?.error ?? 'Failed to set current facility')
-      }
-
-      // 招待コードを使用済みにする
-      const { error: updateError } = await supabase
-        .from('invite_codes')
-        .update({ used: true })
-        .eq('code', code)
-
-      if (updateError) {
-        console.error('Failed to mark invite as used:', updateError)
-        // エラーが発生しても、user_facility_rolesへの追加は成功しているので続行
       }
 
       setIsAccepted(true)
