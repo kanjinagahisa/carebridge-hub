@@ -152,6 +152,17 @@ export default async function ClientTimelinePage({
       notFound()
     }
 
+    // 施設所属チェック：ログインユーザーが client の施設メンバーであることを確認
+    const { data: facilityMembership } = await adminSupabase
+      .from('user_facility_roles')
+      .select('id')
+      .eq('user_id', user.id)
+      .eq('facility_id', client.facility_id)
+      .eq('deleted', false)
+      .maybeSingle()
+
+    if (!facilityMembership) notFound()
+
     const facility = Array.isArray(client.facilities) ? client.facilities[0] : client.facilities
     const facilityName = facility?.name || ''
 
