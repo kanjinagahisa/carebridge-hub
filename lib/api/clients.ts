@@ -273,7 +273,7 @@ export async function getClientDocumentUrl(doc: ClientDocument): Promise<string>
   const supabase = createSupabaseClient()
   const { data } = await supabase.storage
     .from('client-documents')
-    .createSignedUrl(doc.path, 3600) // 1時間有効
+    .createSignedUrl(doc.path, 300) // 5分有効
 
   if (!data) {
     throw new Error('Failed to create signed URL')
