@@ -10,6 +10,12 @@ import { sendPasswordChangedEmail } from '@/lib/utils/email'
  */
 export async function POST(request: NextRequest) {
   try {
+    const supabase = await createClient()
+    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    if (authError || !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
     const body = await request.json()
     const { userId, email } = body
 
@@ -18,6 +24,10 @@ export async function POST(request: NextRequest) {
         { error: 'userId and email are required' },
         { status: 400 }
       )
+    }
+
+    if (user.id !== userId || user.email !== email) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     console.log('[PasswordChangedNotify] Password changed notification requested:', {
