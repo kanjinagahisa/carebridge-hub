@@ -39,7 +39,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         exists: true,
         emailConfirmed: !!matchedUser.email_confirmed_at,
-        userId: matchedUser.id,
       })
     }
 
